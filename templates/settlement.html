@@ -1,0 +1,22 @@
+<div id="files-s3-settlement">
+
+    {if $settlements}
+
+        {foreach $settlements as $_uri=>$_url}
+            <label><input type="radio" name="files_s3[settlement]" value="{$_uri}" class="radiogroup"{if count($settlements) == 1 || $settlement == $_uri} checked{/if} /> &nbsp; {$_url}</label>
+            <br />
+        {/foreach}
+
+    {else}
+
+        <p>
+            [`You need the settlement of Files to switch on S3.`]
+            {sprintf_wp('Use <a href="%s">Site</a> to create new settlement.', "`$wa_backend_url`site/#/routing/")}
+        </p>
+        <script>
+            $('#plugins-settings-form input[type="submit"]').attr('disabled', true);
+        </script>
+
+    {/if}
+
+</div>

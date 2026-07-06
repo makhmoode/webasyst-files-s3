@@ -1,0 +1,13 @@
+<input type="checkbox" name="files_s3[enable]" class="checkbox" id="s3_files_s3_enable" value="1" {if $enable} checked{/if} />
+<script>
+$(function() {
+    {if !$enable}$('#files-s3-settlement').parent().parent().hide();{/if}
+    $('#s3_files_s3_enable').change(function() {
+        if ($(this).is(':checked')) {
+            $('#files-s3-settlement').parent().parent().slideDown();
+        } else {
+            $('#files-s3-settlement').parent().parent().slideUp();
+        }
+    });
+});
+</script>
