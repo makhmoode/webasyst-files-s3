@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="bootstrap.php" colors="true">
+    <testsuites>
+        <testsuite name="s3-unit">
+            <directory suffix="Test.php">php/Unit</directory>
+        </testsuite>
+        <testsuite name="s3-integration">
+            <directory suffix="Test.php">php/Integration</directory>
+        </testsuite>
+    </testsuites>
+    <groups>
+        <exclude>
+            <group>long_tests</group>
+        </exclude>
+    </groups>
+</phpunit>

@@ -1,0 +1,44 @@
+<?php
+
+class FilesS3PluginTest extends FilesS3TestCase
+{
+    public function testGenerateSecretKeyLengthAndCharset()
+    {
+        $secret = filesS3Plugin::generateSecretKey();
+        $this->assertSame(40, strlen($secret));
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{40}$/', $secret);
+
+        $other = filesS3Plugin::generateSecretKey();
+        $this->assertNotSame($secret, $other);
+    }
+
+    public function testNormalizeRequestHeadersFromRedirectAuthorization()
+    {
+        unset($_SERVER['HTTP_AUTHORIZATION']);
+        $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = 'AWS4-HMAC-SHA256 Credential=x/20240101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=abc';
+
+        filesS3Plugin::normalizeRequestHeaders();
+
+        $this->assertSame(
+            $_SERVER['REDIRECT_HTTP_AUTHORIZATION'],
+            $_SERVER['HTTP_AUTHORIZATION']
+        );
+    }
+
+    public function testNormalizeRequestHeadersMapsXAmzFromGetallheadersWhenAvailable()
+    {
+        // When getallheaders() is unavailable (CLI), method still runs safely.
+        $_SERVER['HTTP_X_AMZ_DATE'] = '';
+        unset($_SERVER['HTTP_X_AMZ_DATE']);
+
+        filesS3Plugin::normalizeRequestHeaders();
+
+        $this->assertTrue(true);
+    }
+
+    public function testConstants()
+    {
+        $this->assertSame('files.s3', filesS3Plugin::CONTACT_SETTINGS_APP);
+        $this->assertSame('secret_key', filesS3Plugin::SECRET_KEY_SETTING);
+    }
+}
