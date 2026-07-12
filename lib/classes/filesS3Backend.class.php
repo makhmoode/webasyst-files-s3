@@ -59,7 +59,7 @@ class filesS3Backend
 
     public function init()
     {
-        $this->root_url = rtrim(wa()->getRouteUrl(''), '/') . '/';
+        $this->root_url = rtrim((string) wa()->getRouteUrl(''), '/') . '/';
         $storage_model = new filesStorageModel();
         foreach ($storage_model->getAvailableStorages() as $storage) {
             $this->storage_list[$storage['name']] = $storage;
@@ -130,7 +130,22 @@ class filesS3Backend
         $max_keys = max(1, min(1000, (int) $max_keys));
 
         $this->resolveKey($bucket, $prefix);
-        $parent = $this->last_folder;
+
+        // Prefix ending with '/' targets a folder (or implied prefix). List that folder's children.
+        $folder_marker = null;
+        if ($prefix !== '' && substr($prefix, -1) === '/') {
+            if (empty($this->requested_node['id']) || $this->requested_node['type'] !== 'folder'
+                || !empty($this->requested_node['is_storage'])
+            ) {
+                return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
+            }
+            $parent = $this->requested_node;
+            // Cyberduck / AWS console folder placeholder: zero-size object named as the prefix.
+            $folder_marker = $this->nodeToListItem($prefix, $parent);
+            $folder_marker['size'] = 0;
+        } else {
+            $parent = $this->last_folder;
+        }
         if (!$parent) {
             return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
         }
@@ -144,7 +159,12 @@ class filesS3Backend
 
         $items = array();
         $common_prefixes = array();
-        $prefix_len = strlen($prefix);
+
+        if ($folder_marker) {
+            if ($start_after === '' || strcmp($folder_marker['key'], $start_after) > 0) {
+                $items[] = $folder_marker;
+            }
+        }
 
         foreach ($nodes as $node) {
             $relative = $prefix . $node['name'];
@@ -173,6 +193,7 @@ class filesS3Backend
         $next = $is_truncated && $items ? end($items)['key'] : '';
 
         return array(
+            'prefix'          => $prefix,
             'items'           => $items,
             'common_prefixes' => array_slice($common_prefixes, 0, $max_keys),
             'is_truncated'    => $is_truncated,
@@ -236,6 +257,9 @@ class filesS3Backend
         $head = $this->headObject();
         if (!$head) {
             return null;
+        }
+        if ($this->requested_node['type'] === 'folder' || $this->is_folder_key) {
+            return $head;
         }
         if (!isset($this->requested_node['source_id'])) {
             return null;
@@ -472,7 +496,14 @@ class filesS3Backend
             return false;
         }
         if (is_array($res) && !empty($res['process_id'])) {
-            filesCopytask::perform(10, array('process_id' => $res['process_id']));
+            // copytask chunk size is derived from memory_limit; unlimited (-1) yields 0 and DivisionByZeroError.
+            $this->ensureCopytaskMemoryLimit();
+            try {
+                filesCopytask::perform(10, array('process_id' => $res['process_id']));
+            } catch (DivisionByZeroError $e) {
+                waLog::log('filesS3 copyObject: copytask DivisionByZeroError: ' . $e->getMessage(), 'files/s3.log');
+                return false;
+            }
         }
 
         $copied_id = (is_array($res) && !empty($res['track_ids'][$source['id']])) ? $res['track_ids'][$source['id']] : null;
@@ -486,6 +517,25 @@ class filesS3Backend
         }
 
         return true;
+    }
+
+    /**
+     * Ensure Files copytask can compute a non-zero upload chunk size.
+     */
+    protected function ensureCopytaskMemoryLimit()
+    {
+        $limit = ini_get('memory_limit');
+        if ($limit === false || $limit === '' || $limit === '-1') {
+            @ini_set('memory_limit', '256M');
+        }
+        if (class_exists('filesConfig', false)) {
+            try {
+                $ref = new ReflectionProperty('filesConfig', 'memory_limit');
+                $ref->setAccessible(true);
+                $ref->setValue(null, null);
+            } catch (ReflectionException $e) {
+            }
+        }
     }
 
     /**

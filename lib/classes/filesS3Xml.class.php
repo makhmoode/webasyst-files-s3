@@ -40,7 +40,7 @@ class filesS3Xml
             . '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
             . '<Name>' . htmlspecialchars($bucket, ENT_XML1, 'UTF-8') . '</Name>'
             . '<Prefix>' . htmlspecialchars($prefix, ENT_XML1, 'UTF-8') . '</Prefix>'
-            . '<KeyCount>' . count($items) . '</KeyCount>'
+            . '<KeyCount>' . (count($items) + count($common_prefixes)) . '</KeyCount>'
             . '<MaxKeys>' . (int) $max_keys . '</MaxKeys>'
             . '<IsTruncated>' . ($is_truncated ? 'true' : 'false') . '</IsTruncated>';
 

@@ -43,6 +43,11 @@ class filesS3Server
             $this->handleListParts($bucket, $key);
             return;
         }
+        if ($method === 'GET' && $bucket !== '' && $key !== '' && $this->isListObjectsGetRequest($key)) {
+            $this->applyListObjectsDefaults($key);
+            $this->handleListObjects($bucket);
+            return;
+        }
         if ($method === 'GET' && $bucket !== '' && $key === '') {
             $this->handleListObjects($bucket);
             return;
@@ -182,28 +187,30 @@ class filesS3Server
             return;
         }
 
+        $this->prepareResponse();
         header('Content-Type: ' . $object['content_type']);
         header('Content-Length: ' . ($length !== null ? $length : $object['size']));
         header('ETag: "' . $object['etag'] . '"');
         header('Last-Modified: ' . gmdate('D, d M Y H:i:s', strtotime($object['last_modified'])) . ' GMT');
         http_response_code($status);
 
-        $stream = $object['stream'];
-        if ($offset) {
-            fseek($stream, $offset);
-        }
-        $remaining = $length !== null ? $length : $object['size'];
-        while ($remaining > 0 && !feof($stream)) {
-            $chunk = fread($stream, min(8192, $remaining));
-            if ($chunk === false) {
-                break;
-            }
-            echo $chunk;
-            $remaining -= strlen($chunk);
-        }
+        $stream = isset($object['stream']) ? $object['stream'] : null;
         if (is_resource($stream)) {
+            if ($offset) {
+                fseek($stream, $offset);
+            }
+            $remaining = $length !== null ? $length : $object['size'];
+            while ($remaining > 0 && !feof($stream)) {
+                $chunk = fread($stream, min(8192, $remaining));
+                if ($chunk === false) {
+                    break;
+                }
+                echo $chunk;
+                $remaining -= strlen($chunk);
+            }
             fclose($stream);
         }
+        $this->finishResponse();
     }
 
     protected function handleHeadObject($bucket, $key)
@@ -223,11 +230,44 @@ class filesS3Server
             return;
         }
 
+        $this->prepareResponse();
         header('Content-Type: ' . $head['content_type']);
         header('Content-Length: ' . $head['size']);
         header('ETag: "' . $head['etag'] . '"');
         header('Last-Modified: ' . gmdate('D, d M Y H:i:s', strtotime($head['last_modified'])) . ' GMT');
         http_response_code(200);
+        $this->finishResponse();
+    }
+
+    /**
+     * ListObjects may use bucket root (?prefix=) or path-style GET of a folder key (…/folder/).
+     *
+     * @param string $key
+     * @return bool
+     */
+    protected function isListObjectsGetRequest($key)
+    {
+        if (waRequest::get('list-type') !== null) {
+            return true;
+        }
+        // Folder keys end with '/'; Cyberduck opens them with GET and expects ListBucketResult.
+        return $key !== '' && substr($key, -1) === '/';
+    }
+
+    /**
+     * @param string $key
+     */
+    protected function applyListObjectsDefaults($key)
+    {
+        if ((string) waRequest::get('prefix', '') === '') {
+            $_GET['prefix'] = $key;
+        }
+        if (waRequest::get('list-type') === null || waRequest::get('list-type') === '') {
+            $_GET['list-type'] = '2';
+        }
+        if ((string) waRequest::get('delimiter', '') === '') {
+            $_GET['delimiter'] = '/';
+        }
     }
 
     protected function handlePutObject($bucket, $key)
@@ -450,6 +490,7 @@ class filesS3Server
 
     protected function sendResponse($code, $body)
     {
+        waLog::log(waRequest::server('REQUEST_URI') . "\n" . $body, 'files/s3-debug.log');
         $this->prepareResponse();
         header('Content-Type: application/xml; charset=UTF-8');
         header('Content-Length: ' . strlen($body));

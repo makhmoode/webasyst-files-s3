@@ -113,7 +113,7 @@ class filesS3Plugin extends waPlugin
     public static function getSecretKey($contact_id, $create_if_missing = false)
     {
         $csm = new waContactSettingsModel();
-        $secret = $csm->getOne($contact_id, self::CONTACT_SETTINGS_APP, self::SECRET_KEY_SETTING);
+        $secret = (string) $csm->getOne($contact_id, self::CONTACT_SETTINGS_APP, self::SECRET_KEY_SETTING);
         if ($secret === '' && $create_if_missing) {
             $secret = self::generateSecretKey();
             $csm->set($contact_id, self::CONTACT_SETTINGS_APP, self::SECRET_KEY_SETTING, $secret);
