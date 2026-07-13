@@ -24,7 +24,7 @@ class filesS3Server
         header('X-Amz-Request-Id: ' . substr(md5(uniqid('', true)), 0, 16));
         header('Server: Webasyst S3');
 
-        $region = ifempty($this->settings['region'], 'us-east-1');
+        $region = ifempty($this->settings['region'], filesS3Plugin::DEFAULT_REGION);
         $auth = new filesS3Auth($region);
         if (!$auth->authenticate()) {
             $this->error(403, 'AccessDenied', 'Access Denied');
@@ -279,7 +279,7 @@ class filesS3Server
 
         $copy_source = waRequest::server('HTTP_X_AMZ_COPY_SOURCE');
         if (!$copy_source) {
-            $sig = new filesS3SignatureV4(ifempty($this->settings['region'], 'us-east-1'));
+            $sig = new filesS3SignatureV4(ifempty($this->settings['region'], filesS3Plugin::DEFAULT_REGION));
             $copy_source = $sig->getRequestHeader('x-amz-copy-source');
         }
         if ($copy_source) {

@@ -16,7 +16,7 @@ class filesS3PluginPersonalSettingsAction extends waViewAction
 
         $this->view->assign(array(
             'endpoint_url'   => filesS3Plugin::getEndpointUrl(),
-            'region'         => $plugin->getSettings('region') ?: 'us-east-1',
+            'region'         => $plugin->getSettings('region'),
             'access_key'     => $user->get('login'),
             'secret_key'     => $secret,
             'regenerate_url' => wa()->getAppUrl('files') . '?plugin=s3&module=credentials&action=regenerate',

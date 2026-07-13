@@ -40,5 +40,24 @@ class FilesS3PluginTest extends FilesS3TestCase
     {
         $this->assertSame('files.s3', filesS3Plugin::CONTACT_SETTINGS_APP);
         $this->assertSame('secret_key', filesS3Plugin::SECRET_KEY_SETTING);
+        $this->assertSame('server-1', filesS3Plugin::DEFAULT_REGION);
+    }
+
+    /**
+     * @dataProvider rootSettlementRouteProvider
+     */
+    public function testIsRootSettlement($route, $expected)
+    {
+        $this->assertSame($expected, filesS3Plugin::isRootSettlement($route));
+    }
+
+    public function rootSettlementRouteProvider()
+    {
+        return array(
+            array(array('url' => '*'), true),
+            array(array('url' => 'files/*'), false),
+            array(array('url' => ''), false),
+            array(array(), false),
+        );
     }
 }

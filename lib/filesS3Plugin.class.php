@@ -4,6 +4,22 @@ class filesS3Plugin extends waPlugin
 {
     const CONTACT_SETTINGS_APP = 'files.s3';
     const SECRET_KEY_SETTING = 'secret_key';
+    const DEFAULT_REGION = 'server-1';
+
+    public function getSettings($name = null)
+    {
+        $settings = parent::getSettings($name);
+
+        if ($name === 'region') {
+            return strlen((string) $settings) ? $settings : self::DEFAULT_REGION;
+        }
+
+        if ($name === null && is_array($settings) && !strlen((string) ifset($settings, 'region', ''))) {
+            $settings['region'] = self::DEFAULT_REGION;
+        }
+
+        return $settings;
+    }
 
     public function frontendRequest()
     {
@@ -80,13 +96,36 @@ class filesS3Plugin extends waPlugin
             foreach ($routes as $route) {
                 $uri = $domain . '/' . $route['url'];
                 $url = 'http' . (waRequest::isHttps() ? 's' : '') . '://' . preg_replace('!\*$!', '', $uri);
-                $settlements[$uri] = $url;
+                $settlements[$uri] = array(
+                    'url'     => $url,
+                    'is_root' => self::isRootSettlement($route),
+                );
             }
         }
+
+        $settlement = wa()->getPlugin('s3')->getSettings('settlement');
+        if (empty($settlement) || empty($settlements[$settlement])) {
+            foreach ($settlements as $uri => $item) {
+                if ($item['is_root']) {
+                    $settlement = $uri;
+                    break;
+                }
+            }
+        }
+
         $view = wa()->getView();
         $view->assign('settlements', $settlements);
-        $view->assign('settlement', wa()->getPlugin('s3')->getSettings('settlement'));
+        $view->assign('settlement', $settlement);
         return $view->fetch('plugins/s3/templates/settlement.html');
+    }
+
+    /**
+     * @param array $route
+     * @return bool
+     */
+    public static function isRootSettlement($route)
+    {
+        return ifset($route, 'url', '') === '*';
     }
 
     public static function getTopBlockHtml()

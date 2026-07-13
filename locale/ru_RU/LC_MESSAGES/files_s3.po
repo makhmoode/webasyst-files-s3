@@ -78,3 +78,6 @@ msgstr "Доступ запрещён"
 
 msgid "Copy to clipboard"
 msgstr "Копировать в буфер обмена"
+
+msgid "Only a root settlement of the Files app can be used as S3 endpoint."
+msgstr "В качестве S3 endpoint можно использовать только корневое поселение приложения «Файлы»."
