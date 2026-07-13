@@ -168,6 +168,80 @@ class filesS3Plugin extends waPlugin
 
     /**
      * @param int $contact_id
+     * @return void
+     */
+    public static function deleteSecretKey($contact_id)
+    {
+        $csm = new waContactSettingsModel();
+        $csm->delete($contact_id, self::CONTACT_SETTINGS_APP, self::SECRET_KEY_SETTING);
+    }
+
+    /**
+     * @param int $contact_id
+     * @return bool
+     */
+    public static function userHasFilesAccess($contact_id)
+    {
+        static $contact_ids = null;
+        if ($contact_ids === null) {
+            $contact_ids = array_flip((array) (new waContactRightsModel())->getUsers('files', 'backend', 1));
+        }
+        return isset($contact_ids[$contact_id]);
+    }
+
+    /**
+     * @return array
+     */
+    public static function getFilesAppUsersWithSecrets()
+    {
+        $contact_ids = (new waContactRightsModel())->getUsers('files', 'backend', 1);
+        if (!$contact_ids) {
+            return array();
+        }
+
+        $users = (new waContactModel())->getById($contact_ids);
+        if (!$users) {
+            return array();
+        }
+
+        $csm = new waContactSettingsModel();
+        $result = array();
+        foreach ($users as $id => $user) {
+            $contact = new waContact($user);
+            $secret = (string) $csm->getOne($id, self::CONTACT_SETTINGS_APP, self::SECRET_KEY_SETTING);
+            $result[] = array(
+                'id'         => (int) $id,
+                'name'       => $contact->getName(),
+                'login'      => (string) $contact->get('login'),
+                'photo_url'  => waContact::getPhotoUrl($id, $contact->get('photo'), 20),
+                'has_secret' => $secret !== '',
+            );
+        }
+
+        usort($result, function ($a, $b) {
+            return strcasecmp($a['name'], $b['name']);
+        });
+
+        return $result;
+    }
+
+    public static function getUsersSecretsBlockHtml()
+    {
+        if (!filesRights::inst()->isAdmin()) {
+            return '';
+        }
+
+        $view = wa()->getView();
+        $view->assign(array(
+            'enable'     => wa()->getPlugin('s3')->getSettings('enable'),
+            'users'      => self::getFilesAppUsersWithSecrets(),
+            'manage_url' => wa()->getAppUrl('files') . '?plugin=s3&module=credentials&action=manage',
+        ));
+        return $view->fetch('plugins/s3/templates/usersSecrets.html');
+    }
+
+    /**
+     * @param int $contact_id
      * @return string
      */
     public static function regenerateSecretKey($contact_id)

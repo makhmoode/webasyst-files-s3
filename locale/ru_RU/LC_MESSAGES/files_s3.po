@@ -81,3 +81,54 @@ msgstr "Копировать в буфер обмена"
 
 msgid "Only a root settlement of the Files app can be used as S3 endpoint."
 msgstr "В качестве S3 endpoint можно использовать только корневое поселение приложения «Файлы»."
+
+msgid "Users S3 secrets"
+msgstr "S3-секреты пользователей"
+
+msgid "Manage S3 secret access keys for users who have access to the Files app. The access key is the user login."
+msgstr "Управление секретными ключами S3 для пользователей с доступом к приложению «Файлы». Ключ доступа — логин пользователя."
+
+msgid "User"
+msgstr "Пользователь"
+
+msgid "not set"
+msgstr "не задан"
+
+msgid "Configured"
+msgstr "Настроен"
+
+msgid "Not configured"
+msgstr "Не настроен"
+
+msgid "Generate"
+msgstr "Сгенерировать"
+
+msgid "Regenerate"
+msgstr "Перегенерировать"
+
+msgid "Delete"
+msgstr "Удалить"
+
+msgid "No users with access to the Files app."
+msgstr "Нет пользователей с доступом к приложению «Файлы»."
+
+msgid "User not found or has no access to Files app"
+msgstr "Пользователь не найден или не имеет доступа к приложению «Файлы»"
+
+msgid "Secret key already exists"
+msgstr "Секретный ключ уже существует"
+
+msgid "Invalid operation"
+msgstr "Недопустимая операция"
+
+msgid "Delete secret key for this user? Existing S3 clients configured with this key will stop working."
+msgstr "Удалить секретный ключ для этого пользователя? S3-клиенты, настроенные с этим ключом, перестанут работать."
+
+msgid "Regenerate secret key for this user? Existing S3 clients will stop working until their configuration is updated."
+msgstr "Перегенерировать секретный ключ для этого пользователя? S3-клиенты перестанут работать, пока их настройки не будут обновлены."
+
+msgid "New secret key"
+msgstr "Новый секретный ключ"
+
+msgid "OK"
+msgstr "OK"

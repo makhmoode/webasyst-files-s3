@@ -60,4 +60,13 @@ class FilesS3PluginTest extends FilesS3TestCase
             array(array(), false),
         );
     }
+
+    public function testDeleteSecretKeyRemovesSetting()
+    {
+        $csm = new waContactSettingsModel();
+        $contact_id = 1;
+        $csm->set($contact_id, filesS3Plugin::CONTACT_SETTINGS_APP, filesS3Plugin::SECRET_KEY_SETTING, 'abc');
+        filesS3Plugin::deleteSecretKey($contact_id);
+        $this->assertSame('', filesS3Plugin::getSecretKey($contact_id));
+    }
 }

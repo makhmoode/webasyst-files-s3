@@ -29,4 +29,7 @@ return array(
         'description'  => _wp('When listing folders via S3, refresh on-demand external sources (Yandex Disk, S3 storage, etc.) if the last sync for that folder is older than this many seconds. Set to 0 to disable.'),
         'control_type' => waHtmlControl::INPUT,
     ),
+    'users_secrets_block' => array(
+        'control_type' => waHtmlControl::CUSTOM . ' ' . 'filesS3Plugin::getUsersSecretsBlockHtml',
+    ),
 );
