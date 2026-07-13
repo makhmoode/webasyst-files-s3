@@ -150,6 +150,9 @@ class filesS3Backend
             return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
         }
 
+        $list_sync = new filesS3ListSync($this->settings);
+        $list_sync->syncIfNeeded($parent);
+
         $fm = new filesS3FileModel();
         if (!empty($parent['is_storage'])) {
             $nodes = $fm->getAllByStorageId($parent['id']);
