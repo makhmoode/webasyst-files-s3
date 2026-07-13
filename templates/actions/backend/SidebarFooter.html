@@ -1,0 +1,23 @@
+<li id="files-s3-personal-settings-menu-item">
+    <a href="#/s3/">
+        <i class="fas fa-hdd"></i>
+        <span>[`Personal S3 settings`]</span>
+    </a>
+    <script>
+    (function($) {
+        function registerS3Action() {
+            $.files = $.files || {};
+            $.files.controller = $.files.controller || {};
+            $.files.controller.s3Action = function() {
+                var $sidebar = $('#f-sidebar');
+                $sidebar.find('li.selected').removeClass('selected');
+                $('#files-s3-personal-settings-menu-item').addClass('selected');
+                this.load('?plugin=s3&module=personal&action=settings');
+            };
+        }
+
+        registerS3Action();
+        $(registerS3Action);
+    })(jQuery);
+    </script>
+</li>

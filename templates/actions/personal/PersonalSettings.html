@@ -1,0 +1,131 @@
+<h1>[`Personal S3 settings`]</h1>
+
+<div class="fields custom-mt-16" id="files-s3-credentials-block">
+    {if $endpoint_url}
+        <div class="field">
+            <div class="name">[`Endpoint`]</div>
+            <div class="value break-all">
+                <code class="s3-endpoint">{$endpoint_url|escape}</code>
+                <a href="javascript:void(0);" class="s3-copy custom-ml-4 gray" title="[`Copy to clipboard`]" data-copy-value="{$endpoint_url|escape}">
+                    <i class="fas fa-copy s3-copy-icon"></i>
+                    <i class="fas fa-check s3-copy-done" style="display:none;color:var(--green);"></i>
+                </a>
+            </div>
+        </div>
+        <div class="field">
+            <div class="name">[`Region`]</div>
+            <div class="value">
+                <code>{$region|escape}</code>
+                <a href="javascript:void(0);" class="s3-copy custom-ml-4 gray" title="[`Copy to clipboard`]" data-copy-value="{$region|escape}">
+                    <i class="fas fa-copy s3-copy-icon"></i>
+                    <i class="fas fa-check s3-copy-done" style="display:none;color:var(--green);"></i>
+                </a>
+            </div>
+        </div>
+        <div class="field">
+            <div class="name">[`Access key`]</div>
+            <div class="value break-all">
+                <code class="s3-access-key">{$access_key|escape}</code>
+                <a href="javascript:void(0);" class="s3-copy custom-ml-4 gray" title="[`Copy to clipboard`]" data-copy-value="{$access_key|escape}">
+                    <i class="fas fa-copy s3-copy-icon"></i>
+                    <i class="fas fa-check s3-copy-done" style="display:none;color:var(--green);"></i>
+                </a>
+            </div>
+        </div>
+        <div class="field">
+            <div class="name">[`Secret key`]</div>
+            <div class="value break-all">
+                <code class="s3-secret-key masked">********************************</code>
+                <code class="s3-secret-key revealed" style="display:none;">{$secret_key|escape}</code>
+                <a href="javascript:void(0);" class="s3-toggle-secret custom-ml-4 gray" title="[`Show`]">
+                    <i class="fas fa-eye s3-toggle-show-icon"></i>
+                    <i class="fas fa-eye-slash s3-toggle-hide-icon" style="display:none;"></i>
+                </a>
+                <a href="javascript:void(0);" class="s3-copy custom-ml-4 gray s3-secret-copy" title="[`Copy to clipboard`]" data-copy-value="{$secret_key|escape}">
+                    <i class="fas fa-copy s3-copy-icon"></i>
+                    <i class="fas fa-check s3-copy-done" style="display:none;color:var(--green);"></i>
+                </a>
+            </div>
+        </div>
+        <div class="field">
+            <div class="value">
+                <button type="button" class="button light-gray s3-regenerate-secret">[`Regenerate secret`]</button>
+            </div>
+        </div>
+        <p class="hint">[`Use these credentials in S3 clients (Cyberduck, aws cli, rclone). The access key is your Webasyst login.`]</p>
+    {else}
+        <p class="hint custom-m-0">[`S3 settlement URL is not configured. Ask your administrator to configure the S3 plugin.`]</p>
+    {/if}
+</div>
+
+<script>
+(function($) {
+    $.files.setBrowserTitle('[`Personal S3 settings`]');
+
+    var $block = $('#files-s3-credentials-block');
+    if (!$block.length) {
+        return;
+    }
+
+    function showCopyDone($btn) {
+        $btn.find('.s3-copy-icon').hide();
+        $btn.find('.s3-copy-done').show();
+        setTimeout(function() {
+            $btn.find('.s3-copy-done').hide();
+            $btn.find('.s3-copy-icon').show();
+        }, 2000);
+    }
+
+    $block.on('click', '.s3-copy', async function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var text = $btn.data('copy-value');
+        if (!text) {
+            return;
+        }
+        await $.wa.copyToClipboard(text);
+        showCopyDone($btn);
+    });
+
+    $block.on('click', '.s3-toggle-secret', function(e) {
+        e.preventDefault();
+        var $link = $(this);
+        var $masked = $block.find('.s3-secret-key.masked');
+        var $revealed = $block.find('.s3-secret-key.revealed');
+        if ($revealed.is(':visible')) {
+            $revealed.hide();
+            $masked.show();
+            $link.attr('title', '[`Show`]');
+            $link.find('.s3-toggle-hide-icon').hide();
+            $link.find('.s3-toggle-show-icon').show();
+        } else {
+            $masked.hide();
+            $revealed.show();
+            $link.attr('title', '[`Hide`]');
+            $link.find('.s3-toggle-show-icon').hide();
+            $link.find('.s3-toggle-hide-icon').show();
+        }
+    });
+
+    $block.on('click', '.s3-regenerate-secret', function() {
+        var $btn = $(this);
+        $.waDialog.confirm({
+            text: '[`Regenerate secret key? Existing S3 clients will stop working until you update their configuration.`]',
+            success_button_title: '[`Regenerate secret`]',
+            success_button_class: 'warning',
+            onSuccess: function() {
+                $btn.prop('disabled', true);
+                $.post('{$regenerate_url|escape:javascript}', function(r) {
+                    if (r && r.status === 'ok' && r.data && r.data.secret_key) {
+                        $block.find('.s3-secret-key.revealed').text(r.data.secret_key);
+                        $block.find('.s3-secret-key.masked').text('*'.repeat(40));
+                        $block.find('.s3-secret-copy').data('copy-value', r.data.secret_key);
+                    }
+                }, 'json').always(function() {
+                    $btn.prop('disabled', false);
+                });
+            }
+        });
+    });
+})(jQuery);
+</script>

@@ -56,8 +56,12 @@ class filesS3Plugin extends waPlugin
             return array();
         }
 
-        $action = new filesS3PluginBackendSidebarAction();
-        return array('section' => $action->display());
+        $view = wa()->getView();
+        $footer = $view->fetch(wa()->getAppPath('plugins/s3/templates/actions/backend/SidebarFooter.html', 'files'));
+
+        return array(
+            'footer' => $footer,
+        );
     }
 
     public static function getEnableHtml()
@@ -102,7 +106,9 @@ class filesS3Plugin extends waPlugin
             return '';
         }
         $settlement = preg_replace('!\*$!', '', $settlement);
-        return 'http' . (waRequest::isHttps() ? 's' : '') . '://' . $settlement;
+        $url = 'http' . (waRequest::isHttps() ? 's' : '') . '://' . $settlement;
+
+        return rtrim($url, '/');
     }
 
     /**
