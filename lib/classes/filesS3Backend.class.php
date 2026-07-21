@@ -150,7 +150,7 @@ class filesS3Backend
             return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
         }
 
-        $list_sync = new filesS3ListSync($this->settings);
+        $list_sync = new filesS3ListSync();
         $list_sync->syncIfNeeded($parent);
 
         $fm = new filesS3FileModel();

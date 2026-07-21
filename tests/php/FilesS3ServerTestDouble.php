@@ -54,12 +54,36 @@ class FilesS3ServerTestDouble extends filesS3Server
         $this->applyListObjectsDefaults($key);
     }
 
+    /**
+     * @return array|false
+     */
+    public function exposeOpenUploadBody()
+    {
+        return $this->openUploadBody();
+    }
+
     protected function finishResponse()
     {
         if ($this->capture_mode) {
             return;
         }
         parent::finishResponse();
+    }
+
+    protected function sendProtocolHeaders()
+    {
+        if ($this->capture_mode) {
+            return;
+        }
+        parent::sendProtocolHeaders();
+    }
+
+    protected function prepareResponse()
+    {
+        if ($this->capture_mode) {
+            return;
+        }
+        parent::prepareResponse();
     }
 
     protected function sendResponse($code, $body)

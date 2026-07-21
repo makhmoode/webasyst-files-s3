@@ -49,4 +49,24 @@ class FilesS3BackendTestDouble extends filesS3Backend
     {
         $this->root_url = $root_url;
     }
+
+    /**
+     * @param string $bucket
+     * @param string $key
+     * @return string
+     */
+    public function initiateMultipartUpload($bucket, $key)
+    {
+        return 'test-upload-id';
+    }
+
+    /**
+     * @param string $bucket
+     * @param array $keys
+     * @return array
+     */
+    public function deleteObjects($bucket, $keys)
+    {
+        return array(array(), array());
+    }
 }

@@ -101,4 +101,87 @@ class FilesS3ServerRoutingTest extends FilesS3TestCase
         $this->assertStringContainsString('ListAllMyBucketsResult', $this->server->captured_body);
         $this->assertStringContainsString('docs', $this->server->captured_body);
     }
+
+    public function testPostUploadsEmptyParamRoutesToInitiateMultipart()
+    {
+        $this->skipIfFilesAppUnavailable();
+        $this->stubAuthenticatedUser();
+
+        FilesS3RequestHelper::apply(array(
+            'method' => 'POST',
+            'uri'    => '/files/docs/file.tar?uploads',
+        ));
+        $this->assertSame('', waRequest::get('uploads'));
+        $this->assertTrue(waRequest::get('uploads') !== null);
+
+        $this->server->resetCapture();
+        $this->server->request();
+
+        $this->assertSame(200, $this->server->captured_code);
+        $this->assertStringContainsString('InitiateMultipartUploadResult', $this->server->captured_body);
+        $this->assertStringContainsString('test-upload-id', $this->server->captured_body);
+        $this->assertStringNotContainsString('MethodNotAllowed', $this->server->captured_body);
+    }
+
+    public function testPostDeleteEmptyParamRoutesToDeleteObjects()
+    {
+        $this->skipIfFilesAppUnavailable();
+        $this->stubAuthenticatedUser();
+
+        FilesS3RequestHelper::apply(array(
+            'method' => 'POST',
+            'uri'    => '/files/docs?delete',
+        ));
+        $this->assertSame('', waRequest::get('delete'));
+        $this->assertTrue(waRequest::get('delete') !== null);
+
+        $this->server->resetCapture();
+        $this->server->request();
+
+        $this->assertSame(200, $this->server->captured_code);
+        $this->assertStringContainsString('DeleteResult', $this->server->captured_body);
+        $this->assertStringNotContainsString('MethodNotAllowed', $this->server->captured_body);
+    }
+
+    protected function skipIfFilesAppUnavailable()
+    {
+        if (empty($GLOBALS['files_s3_files_app_ready'])) {
+            $this->markTestSkipped('files app not available: ' . ifset($GLOBALS['files_s3_files_app_error'], ''));
+        }
+    }
+
+    protected function stubAuthenticatedUser()
+    {
+        wa('files')->setUser(new FilesS3RoutingAuthUserStub(1));
+        $this->assertTrue(wa()->getUser()->isAuth());
+    }
+}
+
+/**
+ * Minimal auth stub so filesS3Auth short-circuits without SigV4 in routing unit tests.
+ */
+class FilesS3RoutingAuthUserStub extends waUser
+{
+    /**
+     * @var int
+     */
+    protected $stub_id;
+
+    /**
+     * @param int $id
+     */
+    public function __construct($id)
+    {
+        $this->stub_id = (int) $id;
+    }
+
+    public function getId($load = true)
+    {
+        return $this->stub_id;
+    }
+
+    public function isAuth()
+    {
+        return true;
+    }
 }

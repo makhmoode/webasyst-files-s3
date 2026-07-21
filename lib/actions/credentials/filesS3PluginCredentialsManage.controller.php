@@ -23,18 +23,21 @@ class filesS3PluginCredentialsManageController extends waJsonController
                     return;
                 }
                 $secret = filesS3Plugin::getSecretKey($contact_id, true);
-                $this->response = array(
-                    'has_secret' => true,
-                    'secret_key' => $secret,
-                );
+                $this->response = $this->buildCredentialsResponse($contact_id, $secret);
                 return;
 
             case 'regenerate':
                 $secret = filesS3Plugin::regenerateSecretKey($contact_id);
-                $this->response = array(
-                    'has_secret' => true,
-                    'secret_key' => $secret,
-                );
+                $this->response = $this->buildCredentialsResponse($contact_id, $secret);
+                return;
+
+            case 'show':
+                $secret = filesS3Plugin::getSecretKey($contact_id);
+                if ($secret === '') {
+                    $this->errors[] = _wp('Secret key is not configured');
+                    return;
+                }
+                $this->response = $this->buildCredentialsResponse($contact_id, $secret);
                 return;
 
             case 'delete':
@@ -47,5 +50,24 @@ class filesS3PluginCredentialsManageController extends waJsonController
             default:
                 $this->errors[] = _wp('Invalid operation');
         }
+    }
+
+    /**
+     * @param int $contact_id
+     * @param string $secret
+     * @return array
+     */
+    protected function buildCredentialsResponse($contact_id, $secret)
+    {
+        $contact = new waContact($contact_id);
+        $plugin = wa()->getPlugin('s3');
+
+        return array(
+            'has_secret'   => true,
+            'endpoint_url' => filesS3Plugin::getEndpointUrl(),
+            'region'       => $plugin->getSettings('region'),
+            'access_key'   => (string) $contact->get('login'),
+            'secret_key'   => $secret,
+        );
     }
 }

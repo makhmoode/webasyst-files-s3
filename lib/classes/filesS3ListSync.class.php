@@ -8,22 +8,14 @@ class filesS3ListSync
     const CACHE_ID = 'plugins/s3/list_sync_times';
 
     /**
-     * @var array
+     * TTL in seconds for list-triggered on-demand source sync.
      */
-    protected $settings;
+    const LIST_SYNC_TTL = 120;
 
     /**
      * @var int
      */
     protected $sync_count = 0;
-
-    /**
-     * @param array $settings S3 plugin settings (list_sync_ttl).
-     */
-    public function __construct($settings = array())
-    {
-        $this->settings = $settings;
-    }
 
     /**
      * @return int
@@ -34,14 +26,13 @@ class filesS3ListSync
     }
 
     /**
-     * TTL in seconds for cached sync results. 0 disables list-triggered sync.
+     * TTL in seconds for cached sync results.
      *
      * @return int
      */
     public function getSyncTtl()
     {
-        $ttl = (int) ifset($this->settings['list_sync_ttl'], 60);
-        return max(0, $ttl);
+        return self::LIST_SYNC_TTL;
     }
 
     /**
@@ -51,7 +42,7 @@ class filesS3ListSync
      */
     public function syncIfNeeded($parent)
     {
-        if (!$parent || $this->getSyncTtl() <= 0) {
+        if (!$parent) {
             return;
         }
 

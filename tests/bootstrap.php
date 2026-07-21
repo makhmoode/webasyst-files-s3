@@ -41,6 +41,7 @@ $files_s3_require = function ($relative) use ($plugin_lib) {
 // Pure / WA-core-only classes (safe without files app).
 $files_s3_require('classes/filesS3Xml.class.php');
 $files_s3_require('classes/filesS3SignatureV4.class.php');
+$files_s3_require('classes/filesS3ChunkedDecoder.class.php');
 
 if ($GLOBALS['files_s3_files_app_ready']) {
     try {

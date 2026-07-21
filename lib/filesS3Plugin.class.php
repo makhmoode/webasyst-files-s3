@@ -281,6 +281,9 @@ class filesS3Plugin extends waPlugin
                 if ($lower === 'content-length' && empty($_SERVER['CONTENT_LENGTH'])) {
                     $_SERVER['CONTENT_LENGTH'] = $value;
                 }
+                if ($lower === 'content-encoding' && empty($_SERVER['HTTP_CONTENT_ENCODING'])) {
+                    $_SERVER['HTTP_CONTENT_ENCODING'] = $value;
+                }
                 if (strpos($lower, 'x-amz-') === 0) {
                     $server_key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
                     if (empty($_SERVER[$server_key])) {

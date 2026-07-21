@@ -21,8 +21,7 @@ class filesS3Server
     public function request()
     {
         $this->discardBufferedOutput();
-        header('X-Amz-Request-Id: ' . substr(md5(uniqid('', true)), 0, 16));
-        header('Server: Webasyst S3');
+        $this->sendProtocolHeaders();
 
         $region = ifempty($this->settings['region'], filesS3Plugin::DEFAULT_REGION);
         $auth = new filesS3Auth($region);
@@ -72,11 +71,11 @@ class filesS3Server
             $this->handlePutObject($bucket, $key);
             return;
         }
-        if ($method === 'POST' && waRequest::get('delete') && $bucket !== '' && $key === '') {
+        if ($method === 'POST' && waRequest::get('delete') !== null && $bucket !== '' && $key === '') {
             $this->handleDeleteObjects($bucket);
             return;
         }
-        if ($method === 'POST' && waRequest::get('uploads') && $bucket !== '' && $key !== '') {
+        if ($method === 'POST' && waRequest::get('uploads') !== null && $bucket !== '' && $key !== '') {
             $this->handleInitiateMultipartUpload($bucket, $key);
             return;
         }
@@ -292,9 +291,12 @@ class filesS3Server
             return;
         }
 
-        $length = waRequest::server('CONTENT_LENGTH');
-        $length = $length !== null && $length !== '' ? (int) $length : null;
-        $stream = fopen('php://input', 'rb');
+        $body = $this->openUploadBody();
+        if ($body === false) {
+            $this->error(400, 'InvalidRequest', 'Malformed aws-chunked upload body.', '/' . $bucket . '/' . $key);
+            return;
+        }
+        list($stream, $length) = $body;
         $ok = $this->backend->putObject($stream, $length);
         if (is_resource($stream)) {
             fclose($stream);
@@ -411,9 +413,13 @@ class filesS3Server
             return;
         }
 
-        $length = (int) waRequest::server('CONTENT_LENGTH');
-        $stream = fopen('php://input', 'rb');
-        $etag = $this->backend->uploadPart($upload_id, $part_number, $stream, $length);
+        $body = $this->openUploadBody();
+        if ($body === false) {
+            $this->error(400, 'InvalidRequest', 'Malformed aws-chunked upload body.', '/' . $bucket . '/' . $key);
+            return;
+        }
+        list($stream, $length) = $body;
+        $etag = $this->backend->uploadPart($upload_id, $part_number, $stream, $length !== null ? (int) $length : 0);
         if (is_resource($stream)) {
             fclose($stream);
         }
@@ -478,6 +484,40 @@ class filesS3Server
         $this->xmlResponse(200, $xml);
     }
 
+    /**
+     * Open upload body stream; decode aws-chunked framing when present.
+     *
+     * @return array|false array(resource $stream, int|null $length) or false on decode error
+     */
+    protected function openUploadBody()
+    {
+        $input = fopen('php://input', 'rb');
+        if (!$input) {
+            return false;
+        }
+
+        if (!filesS3ChunkedDecoder::isAwsChunkedRequest()) {
+            $length = waRequest::server('CONTENT_LENGTH');
+            $length = $length !== null && $length !== '' ? (int) $length : null;
+            return array($input, $length);
+        }
+
+        $decoded = filesS3ChunkedDecoder::decode($input);
+        fclose($input);
+        if ($decoded === false) {
+            return false;
+        }
+
+        list($stream, $decoded_length) = $decoded;
+        $header_length = waRequest::server('HTTP_X_AMZ_DECODED_CONTENT_LENGTH');
+        if ($header_length !== null && $header_length !== '' && (int) $header_length !== $decoded_length) {
+            fclose($stream);
+            return false;
+        }
+
+        return array($stream, $decoded_length);
+    }
+
     protected function xmlResponse($code, $xml)
     {
         $this->sendResponse($code, $xml);
@@ -496,6 +536,7 @@ class filesS3Server
         header('Content-Length: ' . strlen($body));
         http_response_code($code);
         echo $body;
+waLog::log(waRequest::server('REQUEST_URI') . "\n" . $body, 'files/s3-debug.log');
         $this->finishResponse();
     }
 
@@ -509,6 +550,15 @@ class filesS3Server
     protected function discardBufferedOutput()
     {
         $this->prepareResponse();
+    }
+
+    /**
+     * S3 response protocol headers (safe to override in tests under PHPUnit).
+     */
+    protected function sendProtocolHeaders()
+    {
+        header('X-Amz-Request-Id: ' . substr(md5(uniqid('', true)), 0, 16));
+        header('Server: Webasyst S3');
     }
 
     protected function prepareResponse()

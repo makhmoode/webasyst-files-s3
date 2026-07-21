@@ -21,14 +21,6 @@ class FilesS3ListSyncTestDouble extends filesS3ListSync
     public $run_sync_result = true;
 
     /**
-     * @param array $settings
-     */
-    public function __construct(array $settings = array())
-    {
-        parent::__construct($settings);
-    }
-
-    /**
      * @return int
      */
     public function exposeGetSyncTtl()
