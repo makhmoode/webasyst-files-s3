@@ -15,11 +15,15 @@ class filesS3Auth
     /**
      * Authenticate S3 request via AWS Signature V4 or presigned URL.
      *
+     * Uses sessionless user binding so multipart UploadPart requests keep a stable
+     * contact id without PHP session locks / headers-already-sent failures.
+     *
      * @return bool
      */
     public function authenticate()
     {
         if (wa()->getUser()->isAuth()) {
+            self::bindFilesAppUser(wa()->getUser());
             return true;
         }
 
@@ -44,8 +48,51 @@ class filesS3Auth
             return false;
         }
 
-        wa()->getAuth()->auth(array('id' => $contact['id']));
-        wa()->setLocale(wa()->getUser()->getLocale());
+        $user = new filesS3AuthUser($contact['id']);
+        if (!$user->isAuth()) {
+            return false;
+        }
+
+        self::bindFilesAppUser($user);
         return true;
+    }
+
+    /**
+     * Bind authenticated user for S3 and reset Files rights singleton.
+     *
+     * filesRights caches the first request user (often a guest from frontend
+     * bootstrap). Without resetting it, limited/personal storages stay invisible
+     * after sessionless setUser(). Kept inside the plugin to avoid Files app edits.
+     *
+     * @param waUser|waContact $user
+     */
+    public static function bindFilesAppUser($user)
+    {
+        wa()->setUser($user);
+        if (method_exists($user, 'getLocale')) {
+            wa()->setLocale($user->getLocale());
+        }
+        self::resetFilesRightsSingleton();
+    }
+
+    /**
+     * Drop filesRights request singleton so the next inst() picks up wa()->getUser().
+     */
+    protected static function resetFilesRightsSingleton()
+    {
+        if (!class_exists('filesRights')) {
+            return;
+        }
+
+        $ref = new ReflectionClass('filesRights');
+        if (!$ref->hasProperty('instance')) {
+            return;
+        }
+
+        $prop = $ref->getProperty('instance');
+        $prop->setAccessible(true);
+        if ($prop->isStatic()) {
+            $prop->setValue(null, null);
+        }
     }
 }

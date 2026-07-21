@@ -115,4 +115,60 @@ class FilesS3BackendPathTest extends FilesS3TestCase
         $this->assertSame('folder/file.txt', $this->backend->exposeNormalizePrefix('folder/file.txt'));
         $this->assertSame('dir/', $this->backend->exposeNormalizePrefix('/dir'));
     }
+
+    public function testPutObjectCreatesMissingParentFoldersForNestedKey()
+    {
+        $storage = array(
+            'id'              => 1,
+            'name'            => 'docs',
+            'type'            => 'folder',
+            'is_storage'      => true,
+            'create_datetime' => '2024-01-01 00:00:00',
+        );
+        // Simulate resolveKey for brand-new nested key: parents missing, last_folder_exists=false.
+        $this->backend->seedResolveState(
+            1,
+            $storage,
+            false,
+            $storage,
+            'ON_DOC.xml/1/meta.xml'
+        );
+
+        $stream = fopen('php://temp', 'r');
+        $this->assertTrue($this->backend->putObject($stream, 10));
+        fclose($stream);
+
+        $this->assertCount(1, $this->backend->ensure_folders_calls);
+        $this->assertSame(array(1, 'ON_DOC.xml/1'), $this->backend->ensure_folders_calls[0]);
+        $this->assertSame('meta.xml', $this->backend->last_create_file['name']);
+        $this->assertSame(42, $this->backend->last_create_file['parent_id']);
+    }
+
+    public function testPutObjectStillReplacesExistingFile()
+    {
+        $storage = array(
+            'id'         => 1,
+            'name'       => 'docs',
+            'type'       => 'folder',
+            'is_storage' => true,
+        );
+        $file = array(
+            'id'         => 9,
+            'name'       => 'meta.xml',
+            'type'       => 'file',
+            'storage_id' => 1,
+            'parent_id'  => 3,
+            'size'       => 1,
+        );
+        $this->backend->seedResolveState(1, $storage, true, $file, 'folder/meta.xml');
+
+        $stream = fopen('php://temp', 'r');
+        $this->assertTrue($this->backend->putObject($stream, 5));
+        fclose($stream);
+
+        $this->assertEmpty($this->backend->ensure_folders_calls);
+        $this->assertNotNull($this->backend->last_replace_file);
+        $this->assertSame(9, $this->backend->last_replace_file['id']);
+        $this->assertSame(5, $this->backend->last_replace_file['size']);
+    }
 }

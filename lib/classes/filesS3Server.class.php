@@ -21,15 +21,16 @@ class filesS3Server
     public function request()
     {
         $this->discardBufferedOutput();
-        $this->sendProtocolHeaders();
 
         $region = ifempty($this->settings['region'], filesS3Plugin::DEFAULT_REGION);
         $auth = new filesS3Auth($region);
         if (!$auth->authenticate()) {
+            $this->sendProtocolHeaders();
             $this->error(403, 'AccessDenied', 'Access Denied');
             return;
         }
 
+        $this->sendProtocolHeaders();
         $this->backend->init();
 
         $path = waRequest::server('REQUEST_URI');
@@ -419,17 +420,17 @@ class filesS3Server
             return;
         }
         list($stream, $length) = $body;
-        $etag = $this->backend->uploadPart($upload_id, $part_number, $stream, $length !== null ? (int) $length : 0);
+        $result = $this->backend->uploadPart($upload_id, $part_number, $stream, $length !== null ? (int) $length : 0);
         if (is_resource($stream)) {
             fclose($stream);
         }
 
-        if (!$etag) {
-            $this->error(404, 'NoSuchUpload', 'The specified upload does not exist.', '/' . $bucket . '/' . $key);
+        if (!is_array($result) || empty($result['etag'])) {
+            $this->multipartError($result, $bucket, $key);
             return;
         }
 
-        header('ETag: "' . $etag . '"');
+        header('ETag: "' . $result['etag'] . '"');
         http_response_code(200);
     }
 
@@ -452,8 +453,8 @@ class filesS3Server
         }
 
         $result = $this->backend->completeMultipartUpload($upload_id, $parts);
-        if (!$result) {
-            $this->error(404, 'NoSuchUpload', 'The specified upload does not exist.', '/' . $bucket . '/' . $key);
+        if (!is_array($result) || empty($result['etag'])) {
+            $this->multipartError($result, $bucket, $key);
             return;
         }
 
@@ -464,8 +465,9 @@ class filesS3Server
     protected function handleAbortMultipartUpload($bucket, $key)
     {
         $upload_id = waRequest::get('uploadId');
-        if (!$this->backend->abortMultipartUpload($upload_id)) {
-            $this->error(404, 'NoSuchUpload', 'The specified upload does not exist.', '/' . $bucket . '/' . $key);
+        $result = $this->backend->abortMultipartUpload($upload_id);
+        if ($result !== true) {
+            $this->multipartError(is_array($result) ? $result : array('error' => 'NoSuchUpload'), $bucket, $key);
             return;
         }
         http_response_code(204);
@@ -475,13 +477,35 @@ class filesS3Server
     {
         $upload_id = waRequest::get('uploadId');
         $parts = $this->backend->listParts($upload_id);
-        if ($parts === false) {
-            $this->error(404, 'NoSuchUpload', 'The specified upload does not exist.', '/' . $bucket . '/' . $key);
+        if ($parts === false || (is_array($parts) && isset($parts['error']))) {
+            $this->multipartError(is_array($parts) ? $parts : array('error' => 'NoSuchUpload'), $bucket, $key);
             return;
         }
 
         $xml = filesS3Xml::listParts($bucket, $key, $upload_id, $parts);
         $this->xmlResponse(200, $xml);
+    }
+
+    /**
+     * Map multipart backend error payload to S3 XML error response.
+     *
+     * @param array|false|null $result
+     * @param string $bucket
+     * @param string $key
+     */
+    protected function multipartError($result, $bucket, $key)
+    {
+        $error = is_array($result) ? ifset($result['error'], 'NoSuchUpload') : 'NoSuchUpload';
+        $resource = '/' . $bucket . '/' . $key;
+        if ($error === 'AccessDenied') {
+            $this->error(403, 'AccessDenied', 'Access Denied', $resource);
+            return;
+        }
+        if ($error === 'Conflict') {
+            $this->error(409, 'Conflict', 'Could not store upload part.', $resource);
+            return;
+        }
+        $this->error(404, 'NoSuchUpload', 'The specified upload does not exist.', $resource);
     }
 
     /**

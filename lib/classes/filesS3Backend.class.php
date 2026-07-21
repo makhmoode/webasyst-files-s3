@@ -292,17 +292,18 @@ class filesS3Backend
             return $this->putFolder($this->current_key);
         }
 
-        if (!$this->last_folder_exists || !$this->last_folder) {
+        // Storage must be known (resolveKey). Parent folders may be missing yet —
+        // AWS CLI / SDKs PUT nested keys without creating prefix markers first.
+        if (!$this->storage_id || !$this->last_folder) {
             return false;
         }
 
-        if ($this->requested_node && $this->requested_node['type'] === 'file') {
-            $fm = new filesS3FileModel();
+        if (!empty($this->requested_node['id']) && ifset($this->requested_node['type']) === 'file') {
             $data = $this->requested_node;
             if ($content_length !== null) {
                 $data['size'] = $content_length;
             }
-            return (bool) $fm->replaceFile($data, $stream);
+            return $this->replaceFileRecord($data, $stream);
         }
 
         $key = $this->current_key;
@@ -316,17 +317,39 @@ class filesS3Backend
             if (!$this->ensureFolders($this->storage_id, $dir)) {
                 return false;
             }
-            $this->resolveKey($this->getBucketName(), $key);
+        } else {
+            $this->parent_id = 0;
         }
 
-        $fm = new filesS3FileModel();
         $file = array(
             'name'       => $filename,
             'size'       => $content_length,
             'parent_id'  => $this->parent_id,
             'storage_id' => $this->storage_id,
         );
+        return $this->createFileRecord($file, $stream);
+    }
+
+    /**
+     * @param array $file
+     * @param resource $stream
+     * @return bool
+     */
+    protected function createFileRecord(array $file, $stream)
+    {
+        $fm = new filesS3FileModel();
         return (bool) $fm->addFile($file, $stream);
+    }
+
+    /**
+     * @param array $data
+     * @param resource $stream
+     * @return bool
+     */
+    protected function replaceFileRecord(array $data, $stream)
+    {
+        $fm = new filesS3FileModel();
+        return (bool) $fm->replaceFile($data, $stream);
     }
 
     /**
@@ -471,7 +494,7 @@ class filesS3Backend
             return false;
         }
 
-        if (!$this->last_folder_exists || !$this->last_folder) {
+        if (!$this->storage_id || !$this->last_folder) {
             return false;
         }
 
@@ -487,6 +510,8 @@ class filesS3Backend
                 return false;
             }
             $this->resolveKey($this->getBucketName(), $key);
+        } else {
+            $this->parent_id = 0;
         }
 
         if ($this->requested_node) {
@@ -588,7 +613,7 @@ class filesS3Backend
             $parent_id = $this->parent_id;
         }
 
-        $mm = new filesS3MultipartModel();
+        $mm = $this->getMultipartModel();
         return $mm->createUpload(wa()->getUser()->getId(), $storage_id, $parent_id, $filename);
     }
 
@@ -597,49 +622,58 @@ class filesS3Backend
      * @param int $part_number
      * @param resource $stream
      * @param int $size
-     * @return string|false
+     * @return array etag on success, or array('error' => NoSuchUpload|AccessDenied|Conflict)
      */
     public function uploadPart($upload_id, $part_number, $stream, $size)
     {
-        $mm = new filesS3MultipartModel();
-        $upload = $mm->getUpload($upload_id, wa()->getUser()->getId());
-        if (!$upload) {
-            return false;
+        $owned = $this->resolveOwnedUpload($upload_id);
+        if (isset($owned['error'])) {
+            return $owned;
         }
+        $mm = $owned['model'];
 
         $path = $mm->getPartPath($upload_id, $part_number);
-        waFiles::create($path);
+        // waFiles::create() treats extensionless basenames as directories; only ensure parent dir.
+        waFiles::create(dirname($path) . '/');
+        if (is_dir($path)) {
+            // Leftover from older buggy create($partPath) calls.
+            waFiles::delete($path);
+        }
         $dest = fopen($path, 'wb');
         if (!$dest) {
-            return false;
+            return array('error' => 'Conflict');
         }
         stream_copy_to_stream($stream, $dest);
         fclose($dest);
 
         $etag = md5_file($path);
-        $pm = new filesS3MultipartPartModel();
+        $pm = $this->getMultipartPartModel();
         $pm->savePart($upload_id, $part_number, $size, $etag);
-        return $etag;
+        return array('etag' => $etag);
     }
 
     /**
      * @param string $upload_id
      * @param array $parts array of ['PartNumber'=>, 'ETag'=>]
-     * @return array|false
+     * @return array|array{error:string}
      */
     public function completeMultipartUpload($upload_id, $parts)
     {
-        $mm = new filesS3MultipartModel();
-        $upload = $mm->getUpload($upload_id, wa()->getUser()->getId());
-        if (!$upload) {
-            return false;
+        $owned = $this->resolveOwnedUpload($upload_id);
+        if (isset($owned['error'])) {
+            return $owned;
         }
+        $mm = $owned['model'];
+        $upload = $owned['upload'];
 
         $assembled = $mm->getPartsDir($upload_id) . 'assembled';
-        waFiles::create($assembled);
+        waFiles::create(dirname($assembled) . '/');
+        if (is_dir($assembled)) {
+            waFiles::delete($assembled);
+        }
         $out = fopen($assembled, 'wb');
         if (!$out) {
-            return false;
+            return array('error' => 'Conflict');
         }
 
         usort($parts, function ($a, $b) {
@@ -650,7 +684,7 @@ class filesS3Backend
             $part_path = $mm->getPartPath($upload_id, $part['PartNumber']);
             if (!file_exists($part_path)) {
                 fclose($out);
-                return false;
+                return array('error' => 'NoSuchUpload');
             }
             $in = fopen($part_path, 'rb');
             stream_copy_to_stream($in, $out);
@@ -716,7 +750,7 @@ class filesS3Backend
         @unlink($assembled);
 
         if (!$file_id) {
-            return false;
+            return array('error' => 'Conflict');
         }
         $node = $fm->getById($file_id);
         return array(
@@ -727,32 +761,68 @@ class filesS3Backend
 
     /**
      * @param string $upload_id
-     * @return bool
+     * @return true|array{error:string}
      */
     public function abortMultipartUpload($upload_id)
     {
-        $mm = new filesS3MultipartModel();
-        $upload = $mm->getUpload($upload_id, wa()->getUser()->getId());
-        if (!$upload) {
-            return false;
+        $owned = $this->resolveOwnedUpload($upload_id);
+        if (isset($owned['error'])) {
+            return $owned;
         }
-        $mm->deleteUpload($upload_id);
+        $owned['model']->deleteUpload($upload_id);
         return true;
     }
 
     /**
      * @param string $upload_id
-     * @return array|false
+     * @return array|array{error:string}
      */
     public function listParts($upload_id)
     {
-        $mm = new filesS3MultipartModel();
-        $upload = $mm->getUpload($upload_id, wa()->getUser()->getId());
-        if (!$upload) {
-            return false;
+        $owned = $this->resolveOwnedUpload($upload_id);
+        if (isset($owned['error'])) {
+            return $owned;
         }
-        $pm = new filesS3MultipartPartModel();
+        $pm = $this->getMultipartPartModel();
         return $pm->getParts($upload_id);
+    }
+
+    /**
+     * Load multipart upload and verify ownership for the current user.
+     *
+     * @param string $upload_id
+     * @return array{upload:array,model:filesS3MultipartModel}|array{error:string}
+     */
+    public function resolveOwnedUpload($upload_id)
+    {
+        $mm = $this->getMultipartModel();
+        $upload = $mm->getUpload($upload_id);
+        if (!$upload) {
+            return array('error' => 'NoSuchUpload');
+        }
+        if ((int) $upload['contact_id'] !== (int) wa()->getUser()->getId()) {
+            return array('error' => 'AccessDenied');
+        }
+        return array(
+            'upload' => $upload,
+            'model'  => $mm,
+        );
+    }
+
+    /**
+     * @return filesS3MultipartModel
+     */
+    protected function getMultipartModel()
+    {
+        return new filesS3MultipartModel();
+    }
+
+    /**
+     * @return filesS3MultipartPartModel
+     */
+    protected function getMultipartPartModel()
+    {
+        return new filesS3MultipartPartModel();
     }
 
     /**
@@ -946,7 +1016,7 @@ class filesS3Backend
      */
     protected function ensureFolders($storage_id, $dir_path)
     {
-        $segments = array_filter(explode('/', trim($dir_path, '/')));
+        $segments = array_filter(explode('/', trim($dir_path, '/')), 'strlen');
         $parent_id = 0;
         $fm = new filesS3FileModel();
 

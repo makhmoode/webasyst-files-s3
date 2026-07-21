@@ -4,10 +4,22 @@ class filesS3MultipartModel extends waModel
 {
     protected $table = 'files_s3_multipart';
 
+    /**
+     * @var string
+     */
+    protected $id = 'upload_id';
+
+    /**
+     * @param int $contact_id
+     * @param int $storage_id
+     * @param int $parent_id
+     * @param string $filename
+     * @return string|false
+     */
     public function createUpload($contact_id, $storage_id, $parent_id, $filename)
     {
         $upload_id = bin2hex(random_bytes(16));
-        $this->insert(array(
+        $ok = $this->insert(array(
             'upload_id'       => $upload_id,
             'contact_id'      => (int) $contact_id,
             'storage_id'      => (int) $storage_id,
@@ -15,9 +27,20 @@ class filesS3MultipartModel extends waModel
             'filename'        => $filename,
             'create_datetime' => date('Y-m-d H:i:s'),
         ));
+        if (!$ok) {
+            return false;
+        }
+        if (!$this->getUpload($upload_id)) {
+            return false;
+        }
         return $upload_id;
     }
 
+    /**
+     * @param string $upload_id
+     * @param int|null $contact_id
+     * @return array|null
+     */
     public function getUpload($upload_id, $contact_id = null)
     {
         $data = array('upload_id' => $upload_id);
