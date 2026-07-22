@@ -23,8 +23,8 @@ msgstr "Включить S3"
 msgid "Server URL"
 msgstr "URL сервера"
 
-msgid "AWS region"
-msgstr "Регион AWS"
+msgid "Region"
+msgstr "Регион"
 
 msgid "Region string for S3 client configuration and Signature V4 (e.g. us-east-1)."
 msgstr "Регион для настройки S3-клиента и Signature V4 (например, us-east-1)."
@@ -32,11 +32,11 @@ msgstr "Регион для настройки S3-клиента и Signature V4
 msgid "S3 server must be secured by a valid SSL certificate for production use."
 msgstr "S3-сервер должен быть защищён действительным SSL-сертификатом для промышленного использования."
 
-msgid "Use path-style S3 access in client configuration. Storage names are used as bucket names — use DNS-compatible lowercase names for best compatibility with S3 clients."
-msgstr "Используйте path-style доступ в настройках S3-клиента. Имена хранилищ используются как имена bucket — для лучшей совместимости используйте строчные DNS-совместимые имена."
+msgid "To enable S3, you need a dedicated domain or subdomain (for example, <code>%s</code>) with a root settlement of the Files app."
+msgstr "Для включения S3 нужен выделенный домен или субдомен (например, <code>%s</code>) с поселением приложения «Файлы» в корне."
 
-msgid "You need the settlement of Files to switch on S3."
-msgstr "Для включения S3 необходимо поселение приложения «Файлы»."
+msgid "Use <a href=\"%s\">Site</a> to create new settlement."
+msgstr "Создайте поселение в приложении <a href=\"%s\">Сайт</a>."
 
 msgid "S3 credentials"
 msgstr "Учётные данные S3"
@@ -49,9 +49,6 @@ msgstr "Используйте эти учётные данные в S3-клие
 
 msgid "On-demand source sync TTL"
 msgstr "TTL синхронизации по требованию"
-
-msgid "When listing folders via S3, refresh on-demand external sources (Yandex Disk, S3 storage, etc.) if the last sync for that folder is older than this many seconds. Set to 0 to disable."
-msgstr "При просмотре папок через S3 обновлять внешние источники по требованию (Яндекс.Диск, S3-хранилище и т.д.), если последняя синхронизация папки была раньше указанного числа секунд. 0 — отключить."
 
 msgid "New secret key"
 msgstr "Новый секретный ключ"
@@ -70,9 +67,6 @@ msgstr "Секретный ключ доступа S3"
 
 msgid "Endpoint"
 msgstr "Endpoint"
-
-msgid "Region"
-msgstr "Регион"
 
 msgid "Access key"
 msgstr "Ключ доступа"
@@ -154,3 +148,48 @@ msgstr "Перегенерировать секретный ключ для эт
 
 msgid "OK"
 msgstr "OK"
+
+msgid "Upload size limit"
+msgstr "Лимит размера загрузки"
+
+msgid "Current maximum upload size:"
+msgstr "Текущий максимальный размер загружаемого файла:"
+
+msgid "The effective limit is the smaller of PHP <code>upload_max_filesize</code> and <code>post_max_size</code>. S3 PutObject and each multipart UploadPart must fit within this limit (and within the web server body size limit)."
+msgstr "Фактический лимит — меньшее из значений PHP <code>upload_max_filesize</code> и <code>post_max_size</code>. PutObject и каждая часть multipart UploadPart должны укладываться в этот лимит (и в лимит размера тела запроса веб-сервера)."
+
+msgid "To increase the limit, raise <code>upload_max_filesize</code> and <code>post_max_size</code> in <code>%s</code> (or in the PHP-FPM pool / <code>.user.ini</code>). Keep <code>post_max_size</code> ≥ <code>upload_max_filesize</code>, restart PHP, and also check the web server limit (e.g. nginx <code>client_max_body_size</code>)."
+msgstr "Чтобы увеличить лимит, поднимите <code>upload_max_filesize</code> и <code>post_max_size</code> в <code>%s</code> (или в пуле PHP-FPM / <code>.user.ini</code>). Значение <code>post_max_size</code> должно быть не меньше <code>upload_max_filesize</code>, затем перезапустите PHP и проверьте лимит веб-сервера (например, nginx <code>client_max_body_size</code>)."
+
+msgid "To increase the limit, raise <code>upload_max_filesize</code> and <code>post_max_size</code> in php.ini (or in the PHP-FPM pool / .user.ini). Keep <code>post_max_size</code> ≥ <code>upload_max_filesize</code>, restart PHP, and also check the web server limit (e.g. nginx <code>client_max_body_size</code>)."
+msgstr "Чтобы увеличить лимит, поднимите <code>upload_max_filesize</code> и <code>post_max_size</code> в php.ini (или в пуле PHP-FPM / .user.ini). Значение <code>post_max_size</code> должно быть не меньше <code>upload_max_filesize</code>, затем перезапустите PHP и проверьте лимит веб-сервера (например, nginx <code>client_max_body_size</code>)."
+
+msgid "Available buckets"
+msgstr "Доступные бакеты"
+
+msgid "Use path-style S3 access in client configuration."
+msgstr "Используйте path-style доступ в настройках S3-клиента."
+
+msgid "Storage names are used as bucket names — use DNS-compatible lowercase names for best compatibility with S3 clients."
+msgstr "Названия хранилищ (корневых папок) используются как имена бакетов — для лучшей совместимости используйте строчные DNS-совместимые имена."
+
+msgid "Storage names are used as S3 bucket names."
+msgstr "Названия хранилищ (корневых папок) используются как имена S3 бакетов."
+
+msgid "Use path-style requests, for example:"
+msgstr "Используйте path-style запросы, например:"
+
+msgid "No storages are available as S3 buckets."
+msgstr "Нет хранилищ, доступных как S3 бакеты."
+
+msgid "Personal"
+msgstr "Персональное"
+
+msgid "Shared with any backend user"
+msgstr "Доступно всем пользователям бекенда"
+
+msgid "Limited access"
+msgstr "Ограниченный доступ"
+
+msgid "name is not DNS-compatible; some S3 clients may require path-style access"
+msgstr "имя не DNS-совместимо; для некоторых S3-клиентов может быть недоступным"

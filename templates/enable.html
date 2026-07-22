@@ -1,14 +1,42 @@
 <input type="checkbox" name="files_s3[enable]" class="checkbox" id="s3_files_s3_enable" value="1" {if $enable} checked{/if} />
 <script>
 $(function() {
-    var $settlementField = $('#files-s3-settlement').closest('.field');
-    {if !$enable}$settlementField.hide();{/if}
-    $('#s3_files_s3_enable').change(function() {
-        if ($(this).is(':checked')) {
-            $settlementField.slideDown();
+    var $enable = $('#s3_files_s3_enable');
+    var $withEnable = $()
+        .add($('#files-s3-settlement').closest('.field'));
+    var $withSettlement = $()
+        .add($('#s3_files_s3_region').closest('.field'))
+        .add($('#files-s3-buckets').closest('.field'))
+        .add($('#files-s3-upload-limits').closest('.field'));
+
+    function hasSettlementSelected() {
+        return $('input[name="files_s3[settlement]"]:checked:not(:disabled)').length > 0;
+    }
+
+    function setVisible($els, visible, animate) {
+        if (animate) {
+            visible ? $els.slideDown() : $els.slideUp();
+        } else if (visible) {
+            $els.show();
         } else {
-            $settlementField.slideUp();
+            $els.hide();
         }
+    }
+
+    function syncVisibility(animate) {
+        var enabled = $enable.is(':checked');
+        setVisible($withEnable, enabled, animate);
+        setVisible($withSettlement, enabled && hasSettlementSelected(), animate);
+    }
+
+    syncVisibility(false);
+
+    $enable.change(function() {
+        syncVisibility(true);
+    });
+
+    $(document).on('change', 'input[name="files_s3[settlement]"]', function() {
+        syncVisibility(true);
     });
 });
 </script>

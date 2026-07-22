@@ -69,4 +69,19 @@ class FilesS3PluginTest extends FilesS3TestCase
         filesS3Plugin::deleteSecretKey($contact_id);
         $this->assertSame('', filesS3Plugin::getSecretKey($contact_id));
     }
+
+    public function testGetUploadLimitsInfo()
+    {
+        $info = filesS3Plugin::getUploadLimitsInfo();
+        $this->assertArrayHasKey('upload_raw', $info);
+        $this->assertArrayHasKey('post_raw', $info);
+        $this->assertArrayHasKey('effective_bytes', $info);
+        $this->assertArrayHasKey('effective_formatted', $info);
+        $this->assertGreaterThan(0, $info['effective_bytes']);
+        $this->assertSame(
+            min($info['upload_bytes'], $info['post_bytes']),
+            $info['effective_bytes']
+        );
+        $this->assertNotSame('', $info['effective_formatted']);
+    }
 }

@@ -2,6 +2,7 @@
 
 $is_russian_locale = wa()->getLocale() === 'ru_RU';
 $region_placeholder = $is_russian_locale ? 'ru-central1' : 'us-east-1';
+$has_root_files_settlement = filesS3Plugin::hasRootFilesSettlement();
 
 return array(
     'top_block' => array(
@@ -13,15 +14,25 @@ return array(
     ),
     'settlement' => array(
         'title'        => _wp('Server URL'),
-        'description'  => _wp('Only a root settlement of the Files app can be used as S3 endpoint.'),
+        'description'  => $has_root_files_settlement
+            ? _wp('Only a root settlement of the Files app can be used as S3 endpoint.')
+            : '',
         'control_type' => waHtmlControl::CUSTOM . ' ' . 'filesS3Plugin::getSettlementHtml',
     ),
     'region' => array(
-        'title'        => _wp('AWS region'),
+        'title'        => _wp('Region'),
         'value'        => 'server-1',
         'placeholder'  => $region_placeholder,
         'description'  => _wp('Region string for S3 client configuration and Signature V4 (e.g. us-east-1).'),
         'control_type' => waHtmlControl::INPUT,
+    ),
+    'buckets' => array(
+        'title'        => _wp('Available buckets'),
+        'control_type' => waHtmlControl::CUSTOM . ' ' . 'filesS3Plugin::getBucketsHtml',
+    ),
+    'upload_limits' => array(
+        'title'        => _wp('Upload size limit'),
+        'control_type' => waHtmlControl::CUSTOM . ' ' . 'filesS3Plugin::getUploadLimitsHtml',
     ),
     'users_secrets_block' => array(
         'control_type' => waHtmlControl::CUSTOM . ' ' . 'filesS3Plugin::getUsersSecretsBlockHtml',

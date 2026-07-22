@@ -1,0 +1,20 @@
+<div id="files-s3-buckets">
+    {if $buckets}
+        <p class="small custom-mb-12">
+            [`Storage names are used as bucket names — use DNS-compatible lowercase names for best compatibility with S3 clients.`]
+        </p>
+        <ul class="menu custom-m-0">
+            {foreach $buckets as $bucket}
+                <li class="custom-mb-4">
+                    <code>{$bucket.name|escape}</code>
+                    <span class="hint">— {$bucket.access_type_label|escape}</span>
+                    {if !$bucket.dns_compatible}
+                        <span class="small">([`name is not DNS-compatible; some S3 clients may require path-style access`])</span>
+                    {/if}
+                </li>
+            {/foreach}
+        </ul>
+    {else}
+        <p class="hint custom-m-0">[`No storages are available as S3 buckets.`]</p>
+    {/if}
+</div>

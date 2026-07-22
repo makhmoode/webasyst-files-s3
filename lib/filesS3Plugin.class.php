@@ -103,6 +103,14 @@ class filesS3Plugin extends waPlugin
             }
         }
 
+        $has_root_settlement = false;
+        foreach ($settlements as $item) {
+            if (!empty($item['is_root'])) {
+                $has_root_settlement = true;
+                break;
+            }
+        }
+
         $settlement = wa()->getPlugin('s3')->getSettings('settlement');
         if (empty($settlement) || empty($settlements[$settlement])) {
             foreach ($settlements as $uri => $item) {
@@ -116,7 +124,43 @@ class filesS3Plugin extends waPlugin
         $view = wa()->getView();
         $view->assign('settlements', $settlements);
         $view->assign('settlement', $settlement);
+        $view->assign('has_root_settlement', $has_root_settlement);
+        $view->assign('example_s3_host', self::getExampleS3Host());
         return $view->fetch('plugins/s3/templates/settlement.html');
+    }
+
+    /**
+     * Whether Files app has at least one root settlement usable as S3 endpoint.
+     *
+     * @return bool
+     */
+    public static function hasRootFilesSettlement()
+    {
+        $domain_routes = wa()->getRouting()->getByApp(wa()->getApp());
+        foreach ($domain_routes as $routes) {
+            foreach ($routes as $route) {
+                if (self::isRootSettlement($route)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Example S3 host for settings hints (s3.<current-domain>).
+     *
+     * @return string
+     */
+    public static function getExampleS3Host()
+    {
+        $host = (string) waRequest::server('HTTP_HOST', '');
+        $host = preg_replace('/:\d+$/', '', $host);
+        $host = strtolower(trim($host));
+        if ($host === '' || $host === 'localhost' || filter_var($host, FILTER_VALIDATE_IP)) {
+            $host = 'example.com';
+        }
+        return 's3.'.$host;
     }
 
     /**
@@ -132,6 +176,95 @@ class filesS3Plugin extends waPlugin
     {
         $view = wa()->getView();
         return $view->fetch('plugins/s3/templates/topBlock.html');
+    }
+
+    /**
+     * Current PHP upload limits for the settings screen.
+     *
+     * @return array
+     */
+    public static function getUploadLimitsInfo()
+    {
+        $upload_raw = (string) ini_get('upload_max_filesize');
+        $post_raw = (string) ini_get('post_max_size');
+        $upload_bytes = waRequest::toBytes($upload_raw);
+        $post_bytes = waRequest::getPostMaxSize();
+        $effective_bytes = waRequest::getUploadMaxFilesize();
+
+        return array(
+            'upload_raw'          => $upload_raw,
+            'post_raw'            => $post_raw,
+            'upload_bytes'        => $upload_bytes,
+            'post_bytes'          => $post_bytes,
+            'effective_bytes'     => $effective_bytes,
+            'upload_formatted'    => waFiles::formatSize($upload_bytes),
+            'post_formatted'      => waFiles::formatSize($post_bytes),
+            'effective_formatted' => waFiles::formatSize($effective_bytes),
+            'php_ini'             => (string) php_ini_loaded_file(),
+        );
+    }
+
+    public static function getUploadLimitsHtml()
+    {
+        $view = wa()->getView();
+        $view->assign('upload_limits', self::getUploadLimitsInfo());
+        return $view->fetch('plugins/s3/templates/uploadLimits.html');
+    }
+
+    /**
+     * Storages available as S3 buckets for the current user.
+     *
+     * @return array
+     */
+    public static function getBucketsList()
+    {
+        $storage_model = new filesStorageModel();
+        $buckets = array();
+        foreach ($storage_model->getAvailableStorages() as $storage) {
+            $name = (string) ifset($storage['name'], '');
+            if ($name === '') {
+                continue;
+            }
+            $access_type = (string) ifset($storage['access_type'], '');
+            $buckets[] = array(
+                'id'                 => (int) ifset($storage['id'], 0),
+                'name'               => $name,
+                'access_type'        => $access_type,
+                'access_type_label'  => self::getStorageAccessTypeLabel($access_type),
+                'dns_compatible'     => (bool) preg_match('/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/', $name),
+            );
+        }
+
+        usort($buckets, function ($a, $b) {
+            return strcmp($a['name'], $b['name']);
+        });
+
+        return $buckets;
+    }
+
+    /**
+     * @param string $access_type
+     * @return string
+     */
+    public static function getStorageAccessTypeLabel($access_type)
+    {
+        switch ($access_type) {
+            case filesStorageModel::ACCESS_TYPE_PERSONAL:
+                return _wp('Personal');
+            case filesStorageModel::ACCESS_TYPE_EVERYONE:
+                return _wp('Shared with any backend user');
+            case filesStorageModel::ACCESS_TYPE_LIMITED:
+                return _wp('Limited access');
+            default:
+                return $access_type;
+        }
+    }
+
+    public static function getBucketsHtml()
+    {
+        $view = wa()->getView();
+        $view->assign('buckets', self::getBucketsList());
+        return $view->fetch('plugins/s3/templates/buckets.html');
     }
 
     /**

@@ -1,0 +1,23 @@
+<div id="files-s3-upload-limits">
+    <p class="custom-mb-8">
+        [`Current maximum upload size:`]
+        <strong>{$upload_limits.effective_formatted|escape}</strong>
+        <span class="hint">
+            (upload_max_filesize = {$upload_limits.upload_raw|escape},
+            post_max_size = {$upload_limits.post_raw|escape})
+        </span>
+    </p>
+    <p class="hint custom-mb-8">
+        [`The effective limit is the smaller of PHP <code>upload_max_filesize</code> and <code>post_max_size</code>. S3 PutObject and each multipart UploadPart must fit within this limit (and within the web server body size limit).`]
+    </p>
+    <p class="hint custom-mb-0">
+        {if $upload_limits.php_ini}
+            {sprintf_wp(
+                'To increase the limit, raise <code>upload_max_filesize</code> and <code>post_max_size</code> in <code>%s</code> (or in the PHP-FPM pool / <code>.user.ini</code>). Keep <code>post_max_size</code> ≥ <code>upload_max_filesize</code>, restart PHP, and also check the web server limit (e.g. nginx <code>client_max_body_size</code>).',
+                $upload_limits.php_ini|escape
+            )}
+        {else}
+            [`To increase the limit, raise <code>upload_max_filesize</code> and <code>post_max_size</code> in php.ini (or in the PHP-FPM pool / .user.ini). Keep <code>post_max_size</code> ≥ <code>upload_max_filesize</code>, restart PHP, and also check the web server limit (e.g. nginx <code>client_max_body_size</code>).`]
+        {/if}
+    </p>
+</div>

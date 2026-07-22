@@ -9,10 +9,15 @@
             <br />
         {/foreach}
 
-    {else}
+    {/if}
 
-        <p>
-            [`You need the settlement of Files to switch on S3.`]
+    {if !$has_root_settlement}
+
+        <p{if $settlements} class="custom-mt-8"{/if}>
+            {sprintf_wp(
+                'To enable S3, you need a dedicated domain or subdomain (for example, <code>%s</code>) with a root settlement of the Files app.',
+                $example_s3_host|escape
+            )}
             {sprintf_wp('Use <a href="%s">Site</a> to create new settlement.', "`$wa_backend_url`site/#/routing/")}
         </p>
         <script>
