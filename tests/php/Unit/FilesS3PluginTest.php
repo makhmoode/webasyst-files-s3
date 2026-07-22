@@ -6,7 +6,7 @@ class FilesS3PluginTest extends FilesS3TestCase
     {
         $secret = filesS3Plugin::generateSecretKey();
         $this->assertSame(40, strlen($secret));
-        $this->assertMatchesRegularExpression('/^[a-f0-9]{40}$/', $secret);
+        $this->assertRegExp('/^[a-f0-9]{40}$/', $secret);
 
         $other = filesS3Plugin::generateSecretKey();
         $this->assertNotSame($secret, $other);
