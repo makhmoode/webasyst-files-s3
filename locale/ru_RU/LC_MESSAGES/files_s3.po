@@ -11,8 +11,8 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Poedit 3.9\n"
 
-msgid "S3 server"
-msgstr "S3-сервер"
+msgid "S3 Server"
+msgstr "Сервер S3"
 
 msgid "Provides S3-compatible protocol access to Files app storages"
 msgstr "Обеспечивает доступ к хранилищам приложения «Файлы» по протоколу S3"
@@ -29,8 +29,8 @@ msgstr "Регион"
 msgid "Region string for S3 client configuration and Signature V4 (e.g. us-east-1)."
 msgstr "Регион для настройки S3-клиента и Signature V4 (например, us-east-1)."
 
-msgid "S3 server must be secured by a valid SSL certificate for production use."
-msgstr "S3-сервер должен быть защищён действительным SSL-сертификатом для реального применения."
+msgid "S3 Server must be secured by a valid SSL certificate for production use."
+msgstr "Сервер S3 должен быть защищён действительным SSL-сертификатом для реального применения."
 
 msgid "To enable S3, you need a dedicated domain or subdomain (for example, <code>%s</code>) with a root settlement of the Files app."
 msgstr "Для включения S3 нужен выделенный домен или субдомен (например, <code>%s</code>) с поселением приложения «Файлы» в корне."

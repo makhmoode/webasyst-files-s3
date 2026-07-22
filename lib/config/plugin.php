@@ -1,6 +1,6 @@
 <?php
 return array(
-    'name'        => /*_wp*/('S3 server'),
+    'name'        => /*_wp*/('S3 Server'),
     'description' => /*_wp*/('Provides S3-compatible protocol access to Files app storages'),
     'icon'        => 'img/logo.png',
     'img'         => 'img/logo.png',
