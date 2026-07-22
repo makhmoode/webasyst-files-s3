@@ -30,7 +30,7 @@ msgid "Region string for S3 client configuration and Signature V4 (e.g. us-east-
 msgstr "Регион для настройки S3-клиента и Signature V4 (например, us-east-1)."
 
 msgid "S3 server must be secured by a valid SSL certificate for production use."
-msgstr "S3-сервер должен быть защищён действительным SSL-сертификатом для промышленного использования."
+msgstr "S3-сервер должен быть защищён действительным SSL-сертификатом для реального использования."
 
 msgid "To enable S3, you need a dedicated domain or subdomain (for example, <code>%s</code>) with a root settlement of the Files app."
 msgstr "Для включения S3 нужен выделенный домен или субдомен (например, <code>%s</code>) с поселением приложения «Файлы» в корне."
