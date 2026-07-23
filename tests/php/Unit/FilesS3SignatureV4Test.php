@@ -83,6 +83,108 @@ class FilesS3SignatureV4Test extends FilesS3TestCase
         $this->assertFalse($sig->verify('wrong-secret'));
     }
 
+    public function testVerifySigV4HeadBucket()
+    {
+        $uri = '/bucket-name';
+        $signed = FilesS3SigV4RequestBuilder::sign(array(
+            'access_key' => self::ACCESS_KEY,
+            'secret_key' => self::SECRET_KEY,
+            'region'     => self::REGION,
+            'method'     => 'HEAD',
+            'uri'        => $uri,
+            'host'       => self::HOST,
+        ));
+
+        FilesS3RequestHelper::apply(array(
+            'method'  => 'HEAD',
+            'uri'     => $uri,
+            'host'    => self::HOST,
+            'headers' => $signed['headers'],
+        ));
+
+        $this->assertTrue($this->newSig()->verify(self::SECRET_KEY));
+        $this->assertFalse($this->newSig()->verify('wrong-secret'));
+    }
+
+    public function testVerifySigV4HeadBucketWithContentLengthZero()
+    {
+        $uri = '/bucket';
+        $signed = FilesS3SigV4RequestBuilder::sign(array(
+            'access_key' => self::ACCESS_KEY,
+            'secret_key' => self::SECRET_KEY,
+            'region'     => self::REGION,
+            'method'     => 'HEAD',
+            'uri'        => $uri,
+            'host'       => self::HOST,
+            'headers'    => array(
+                'content-length' => '0',
+            ),
+        ));
+
+        FilesS3RequestHelper::apply(array(
+            'method'  => 'HEAD',
+            'uri'     => $uri,
+            'host'    => self::HOST,
+            'headers' => $signed['headers'],
+        ));
+        $this->assertSame('0', $_SERVER['CONTENT_LENGTH']);
+
+        $this->assertTrue($this->newSig()->verify(self::SECRET_KEY));
+    }
+
+    public function testVerifySigV4HeadBucketWhenContentLengthStripped()
+    {
+        $uri = '/bucket';
+        $signed = FilesS3SigV4RequestBuilder::sign(array(
+            'access_key' => self::ACCESS_KEY,
+            'secret_key' => self::SECRET_KEY,
+            'region'     => self::REGION,
+            'method'     => 'HEAD',
+            'uri'        => $uri,
+            'host'       => self::HOST,
+            'headers'    => array(
+                'content-length' => '0',
+            ),
+        ));
+
+        FilesS3RequestHelper::apply(array(
+            'method'  => 'HEAD',
+            'uri'     => $uri,
+            'host'    => self::HOST,
+            'headers' => $signed['headers'],
+        ));
+        // Proxies / PHP often omit Content-Length for HEAD even if the client signed "0".
+        unset($_SERVER['CONTENT_LENGTH']);
+
+        $this->assertTrue($this->newSig()->verify(self::SECRET_KEY));
+    }
+
+    public function testVerifySigV4HeadBucketWhenAcceptEncodingStripped()
+    {
+        $uri = '/bucket';
+        $signed = FilesS3SigV4RequestBuilder::sign(array(
+            'access_key' => self::ACCESS_KEY,
+            'secret_key' => self::SECRET_KEY,
+            'region'     => self::REGION,
+            'method'     => 'HEAD',
+            'uri'        => $uri,
+            'host'       => self::HOST,
+            'headers'    => array(
+                'accept-encoding' => 'identity',
+            ),
+        ));
+
+        FilesS3RequestHelper::apply(array(
+            'method'  => 'HEAD',
+            'uri'     => $uri,
+            'host'    => self::HOST,
+            'headers' => $signed['headers'],
+        ));
+        unset($_SERVER['HTTP_ACCEPT_ENCODING']);
+
+        $this->assertTrue($this->newSig()->verify(self::SECRET_KEY));
+    }
+
     public function testVerifySigV4PutWithPayloadHash()
     {
         $uri = '/files/docs/upload.bin';

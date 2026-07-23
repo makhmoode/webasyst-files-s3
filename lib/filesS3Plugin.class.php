@@ -38,6 +38,12 @@ class filesS3Plugin extends waPlugin
         self::prepareS3Request();
         self::normalizeRequestHeaders();
 
+        // Dedicated S3 settlement: handle every request here (ListObjects GET may lack
+        // detectable markers when Authorization is stripped). Leave clear WebDAV alone.
+        if (filesS3Auth::isWebDavProtocolRequest()) {
+            return false;
+        }
+
         $server = new filesS3Server($this->getSettings());
         $server->request();
 
@@ -291,7 +297,15 @@ class filesS3Plugin extends waPlugin
     public static function getSecretKey($contact_id, $create_if_missing = false)
     {
         $csm = new waContactSettingsModel();
-        $secret = (string) $csm->getOne($contact_id, self::CONTACT_SETTINGS_APP, self::SECRET_KEY_SETTING);
+        // Always read from DB. waContactSettingsModel::getOne() short-circuits to
+        // wa()->getUser()->getSettings() when contact_id matches the current user;
+        // on frontend that cache often lacks files.s3 secrets and yields false 403.
+        $row = $csm->getByField(array(
+            'contact_id' => $contact_id,
+            'app_id'     => self::CONTACT_SETTINGS_APP,
+            'name'       => self::SECRET_KEY_SETTING,
+        ));
+        $secret = $row ? (string) $row['value'] : '';
         if ($secret === '' && $create_if_missing) {
             $secret = self::generateSecretKey();
             $csm->set($contact_id, self::CONTACT_SETTINGS_APP, self::SECRET_KEY_SETTING, $secret);
@@ -337,11 +351,10 @@ class filesS3Plugin extends waPlugin
             return array();
         }
 
-        $csm = new waContactSettingsModel();
         $result = array();
         foreach ($users as $id => $user) {
             $contact = new waContact($user);
-            $secret = (string) $csm->getOne($id, self::CONTACT_SETTINGS_APP, self::SECRET_KEY_SETTING);
+            $secret = self::getSecretKey($id);
             $result[] = array(
                 'id'         => (int) $id,
                 'name'       => $contact->getName(),
@@ -398,12 +411,13 @@ class filesS3Plugin extends waPlugin
      */
     public static function normalizeRequestHeaders()
     {
-        if (empty($_SERVER['HTTP_AUTHORIZATION']) && !empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
-            $_SERVER['HTTP_AUTHORIZATION'] = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
-        }
+        self::recoverAuthorizationHeader();
 
         if (function_exists('getallheaders')) {
             foreach (getallheaders() as $name => $value) {
+                if (!is_string($value) || $value === '') {
+                    continue;
+                }
                 $lower = strtolower($name);
                 if ($lower === 'authorization' && empty($_SERVER['HTTP_AUTHORIZATION'])) {
                     $_SERVER['HTTP_AUTHORIZATION'] = $value;
@@ -411,7 +425,7 @@ class filesS3Plugin extends waPlugin
                 if ($lower === 'content-type' && empty($_SERVER['CONTENT_TYPE'])) {
                     $_SERVER['CONTENT_TYPE'] = $value;
                 }
-                if ($lower === 'content-length' && empty($_SERVER['CONTENT_LENGTH'])) {
+                if ($lower === 'content-length' && (!isset($_SERVER['CONTENT_LENGTH']) || $_SERVER['CONTENT_LENGTH'] === '')) {
                     $_SERVER['CONTENT_LENGTH'] = $value;
                 }
                 if ($lower === 'content-encoding' && empty($_SERVER['HTTP_CONTENT_ENCODING'])) {
@@ -423,6 +437,67 @@ class filesS3Plugin extends waPlugin
                         $_SERVER[$server_key] = $value;
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Copy Authorization into HTTP_AUTHORIZATION from CGI/redirect/apache variants.
+     */
+    public static function recoverAuthorizationHeader()
+    {
+        // Drop non-string / empty Authorization placeholders (proxies sometimes leave NULL).
+        foreach (array('HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION') as $key) {
+            if (!array_key_exists($key, $_SERVER)) {
+                continue;
+            }
+            if (!is_string($_SERVER[$key]) || trim($_SERVER[$key]) === '') {
+                unset($_SERVER[$key]);
+            }
+        }
+
+        if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+            return;
+        }
+
+        $candidates = array();
+        foreach ($_SERVER as $key => $value) {
+            if (!is_string($value) || $value === '') {
+                continue;
+            }
+            if (stripos($key, 'AUTHORIZATION') !== false) {
+                $candidates[] = $value;
+            }
+        }
+
+        foreach (array('getallheaders', 'apache_request_headers') as $fn) {
+            if (!function_exists($fn)) {
+                continue;
+            }
+            $headers = @$fn();
+            if (!is_array($headers)) {
+                continue;
+            }
+            foreach ($headers as $name => $value) {
+                if (strtolower($name) === 'authorization' && is_string($value) && $value !== '') {
+                    $candidates[] = $value;
+                }
+            }
+        }
+
+        foreach ($candidates as $auth) {
+            $auth = trim($auth);
+            if ($auth === '') {
+                continue;
+            }
+            // AWS SigV4 / SigV2, or HTTP Basic (access key:secret) used by some S3 clients.
+            if (
+                stripos($auth, filesS3SignatureV4::ALGORITHM) !== false
+                || preg_match('/^AWS\s+[^:]+:.+/i', $auth)
+                || preg_match('/^Basic\s+\S+/i', $auth)
+            ) {
+                $_SERVER['HTTP_AUTHORIZATION'] = $auth;
+                return;
             }
         }
     }

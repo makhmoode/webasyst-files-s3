@@ -143,6 +143,120 @@ class FilesS3ServerRoutingTest extends FilesS3TestCase
         $this->assertStringNotContainsString('MethodNotAllowed', $this->server->captured_body);
     }
 
+    public function testHeadBucketReturns200ForExistingBucket()
+    {
+        $this->skipIfFilesAppUnavailable();
+        $this->stubAuthenticatedUser();
+
+        FilesS3RequestHelper::apply(array(
+            'method' => 'HEAD',
+            'uri'    => '/files/docs',
+        ));
+
+        $this->server->resetCapture();
+        $this->server->request();
+
+        $this->assertSame(200, $this->server->captured_code);
+        $this->assertSame('', $this->server->captured_body);
+        $this->assertSame('us-east-1', $this->server->captured_headers['x-amz-bucket-region']);
+        $this->assertStringNotContainsString('MethodNotAllowed', (string) $this->server->captured_body);
+    }
+
+    public function testHeadBucketReturns404ForUnknownBucket()
+    {
+        $this->skipIfFilesAppUnavailable();
+        $this->stubAuthenticatedUser();
+
+        FilesS3RequestHelper::apply(array(
+            'method' => 'HEAD',
+            'uri'    => '/files/missing-bucket',
+        ));
+
+        $this->server->resetCapture();
+        $this->server->request();
+
+        $this->assertSame(404, $this->server->captured_code);
+        $this->assertStringContainsString('NoSuchBucket', $this->server->captured_body);
+        $this->assertStringContainsString('<Resource>/missing-bucket</Resource>', $this->server->captured_body);
+    }
+
+    public function testAnonymousHeadBucketWithoutCredentialsReturns200WithRegion()
+    {
+        $this->skipIfFilesAppUnavailable();
+        wa('files')->setUser(new filesS3AuthUserTestDouble(0));
+        $this->assertFalse(wa()->getUser()->isAuth());
+
+        FilesS3RequestHelper::apply(array(
+            'method' => 'HEAD',
+            'uri'    => '/files/bucket-name',
+        ));
+
+        $this->server->resetCapture();
+        $this->server->request();
+
+        $this->assertSame(200, $this->server->captured_code);
+        $this->assertSame('', $this->server->captured_body);
+        $this->assertSame('us-east-1', $this->server->captured_headers['x-amz-bucket-region']);
+        $this->assertFalse($this->server->getBackend()->load_storages_called);
+    }
+
+    public function testAuthFailureForGetIncludesRequestResource()
+    {
+        $this->skipIfFilesAppUnavailable();
+        wa('files')->setUser(new filesS3AuthUserTestDouble(0));
+        $this->assertFalse(wa()->getUser()->isAuth());
+
+        FilesS3RequestHelper::apply(array(
+            'method' => 'GET',
+            'uri'    => '/files/bucket-name',
+        ));
+
+        $this->server->resetCapture();
+        $this->server->request();
+
+        $this->assertSame(403, $this->server->captured_code);
+        $this->assertStringContainsString('AccessDenied', $this->server->captured_body);
+        $this->assertStringContainsString('<Resource>/files/bucket-name</Resource>', $this->server->captured_body);
+        $this->assertSame('Basic realm="S3"', $this->server->captured_headers['www-authenticate']);
+        $this->assertFalse($this->server->getBackend()->load_storages_called);
+    }
+
+    public function testListBucketsLoadsStoragesAfterAuth()
+    {
+        $this->skipIfFilesAppUnavailable();
+        $this->stubAuthenticatedUser();
+
+        FilesS3RequestHelper::apply(array(
+            'method' => 'GET',
+            'uri'    => '/files/',
+        ));
+
+        $backend = $this->server->getBackend();
+        $backend->load_storages_called = false;
+        $backend->load_storages_calls = 0;
+        $backend->setStorageList(array(
+            'everyone-bucket' => array(
+                'id'              => 1,
+                'name'            => 'everyone-bucket',
+                'create_datetime' => '2024-01-01 00:00:00',
+            ),
+            'limited-bucket' => array(
+                'id'              => 2,
+                'name'            => 'limited-bucket',
+                'create_datetime' => '2024-01-02 00:00:00',
+            ),
+        ));
+
+        $this->server->resetCapture();
+        $this->server->request();
+
+        $this->assertTrue($backend->load_storages_called);
+        $this->assertSame(1, $backend->load_storages_calls);
+        $this->assertSame(200, $this->server->captured_code);
+        $this->assertStringContainsString('everyone-bucket', $this->server->captured_body);
+        $this->assertStringContainsString('limited-bucket', $this->server->captured_body);
+    }
+
     protected function skipIfFilesAppUnavailable()
     {
         if (empty($GLOBALS['files_s3_files_app_ready'])) {

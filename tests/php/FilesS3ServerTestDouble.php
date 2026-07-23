@@ -113,6 +113,29 @@ class FilesS3ServerTestDouble extends filesS3Server
     }
 
     /**
+     * @param string $header
+     */
+    protected function emitHeader($header)
+    {
+        if ($this->capture_mode) {
+            $parts = explode(':', $header, 2);
+            if (count($parts) === 2) {
+                $this->captured_headers[strtolower(trim($parts[0]))] = trim($parts[1]);
+            }
+            return;
+        }
+        parent::emitHeader($header);
+    }
+
+    /**
+     * @return FilesS3BackendTestDouble|filesS3Backend
+     */
+    public function getBackend()
+    {
+        return $this->backend;
+    }
+
+    /**
      * Reset capture buffers.
      */
     public function resetCapture()

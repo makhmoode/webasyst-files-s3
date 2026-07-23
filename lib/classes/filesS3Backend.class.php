@@ -59,7 +59,25 @@ class filesS3Backend
 
     public function init()
     {
+        $this->initRootUrl();
+        $this->loadStorages();
+    }
+
+    /**
+     * Settlement path prefix for path-style URLs (safe before auth).
+     */
+    public function initRootUrl()
+    {
         $this->root_url = rtrim((string) wa()->getRouteUrl(''), '/') . '/';
+    }
+
+    /**
+     * Load buckets visible to the current Files user. Must run after S3 auth
+     * binds the real contact — otherwise limited storages are missing.
+     */
+    public function loadStorages()
+    {
+        $this->storage_list = array();
         $storage_model = new filesStorageModel();
         foreach ($storage_model->getAvailableStorages() as $storage) {
             $this->storage_list[$storage['name']] = $storage;

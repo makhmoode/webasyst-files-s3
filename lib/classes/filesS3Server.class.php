@@ -24,20 +24,23 @@ class filesS3Server
 
         $region = ifempty($this->settings['region'], filesS3Plugin::DEFAULT_REGION);
         $auth = new filesS3Auth($region);
-        if (!$auth->authenticate()) {
-            $this->sendProtocolHeaders();
-            $this->error(403, 'AccessDenied', 'Access Denied');
-            return;
-        }
 
-        $this->sendProtocolHeaders();
-        $this->backend->init();
+        // root_url only — do not load storages before auth (guest rights hide limited buckets).
+        $this->backend->initRootUrl();
 
         $path = waRequest::server('REQUEST_URI');
         $relative = $this->backend->stripRootPath($path);
         list($bucket, $key) = $this->backend->splitBucketAndKey($relative);
-
         $method = strtoupper(waRequest::method());
+
+        if (!$auth->authenticate()) {
+            $this->sendProtocolHeaders();
+            $this->handleAuthFailure($method, $bucket, $key, $region);
+            return;
+        }
+
+        $this->sendProtocolHeaders();
+        $this->backend->loadStorages();
 
         if ($method === 'GET' && waRequest::get('uploadId') && $key !== '') {
             $this->handleListParts($bucket, $key);
@@ -46,6 +49,10 @@ class filesS3Server
         if ($method === 'GET' && $bucket !== '' && $key !== '' && $this->isListObjectsGetRequest($key)) {
             $this->applyListObjectsDefaults($key);
             $this->handleListObjects($bucket);
+            return;
+        }
+        if ($method === 'GET' && $bucket !== '' && $key === '' && waRequest::get('location') !== null) {
+            $this->handleGetBucketLocation($bucket);
             return;
         }
         if ($method === 'GET' && $bucket !== '' && $key === '') {
@@ -58,6 +65,10 @@ class filesS3Server
         }
         if ($method === 'GET' && $bucket !== '' && $key !== '') {
             $this->handleGetObject($bucket, $key);
+            return;
+        }
+        if ($method === 'HEAD' && $bucket !== '' && $key === '') {
+            $this->handleHeadBucket($bucket);
             return;
         }
         if ($method === 'HEAD' && $bucket !== '' && $key !== '') {
@@ -99,6 +110,26 @@ class filesS3Server
     protected function handleListBuckets()
     {
         $xml = filesS3Xml::listBuckets($this->backend->getBuckets());
+        $this->xmlResponse(200, $xml);
+    }
+
+    /**
+     * GetBucketLocation — required by Cyberduck to pick the signing region.
+     *
+     * @param string $bucket
+     */
+    protected function handleGetBucketLocation($bucket)
+    {
+        if (!$this->backend->bucketExists($bucket)) {
+            $this->error(404, 'NoSuchBucket', 'The specified bucket does not exist', '/' . $bucket);
+            return;
+        }
+
+        $region = (string) ifempty($this->settings['region'], filesS3Plugin::DEFAULT_REGION);
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+            . htmlspecialchars($region, ENT_XML1, 'UTF-8')
+            . '</LocationConstraint>';
         $this->xmlResponse(200, $xml);
     }
 
@@ -236,7 +267,92 @@ class filesS3Server
         header('ETag: "' . $head['etag'] . '"');
         header('Last-Modified: ' . gmdate('D, d M Y H:i:s', strtotime($head['last_modified'])) . ' GMT');
         http_response_code(200);
+
         $this->finishResponse();
+    }
+
+    /**
+     * HeadBucket: HEAD /bucket with empty object key.
+     *
+     * @param string $bucket
+     */
+    protected function handleHeadBucket($bucket)
+    {
+        if (!$this->backend->bucketExists($bucket)) {
+            $this->error(404, 'NoSuchBucket', 'The specified bucket does not exist', '/' . $bucket);
+            return;
+        }
+
+        $region = ifempty($this->settings['region'], filesS3Plugin::DEFAULT_REGION);
+        $this->prepareResponse();
+        $this->emitHeader('x-amz-bucket-region: ' . $region);
+        $this->sendEmptyResponse(200);
+    }
+
+    /**
+     * Auth failure responses. Cyberduck often probes HeadBucket without SigV4/Basic;
+     * AWS still returns x-amz-bucket-region so the client can sign later requests.
+     *
+     * @param string $method
+     * @param string $bucket
+     * @param string $key
+     * @param string $region
+     */
+    protected function handleAuthFailure($method, $bucket, $key, $region)
+    {
+        $is_head_bucket = ($method === 'HEAD' && $bucket !== '' && $key === '');
+        $has_credentials = $this->requestPresentsCredentials();
+
+        if ($is_head_bucket) {
+            $this->emitHeader('x-amz-bucket-region: ' . $region);
+            if (!$has_credentials) {
+                // Unsigned HeadBucket probe: empty 200 + region (no listing / object access).
+                $this->sendEmptyResponse(200);
+                return;
+            }
+            // Credentials were present but rejected: AWS-style empty HEAD body.
+            $this->emitHeader('WWW-Authenticate: Basic realm="S3"');
+            $this->sendEmptyResponse(403);
+            return;
+        }
+
+        if (!$has_credentials) {
+            $this->emitHeader('WWW-Authenticate: Basic realm="S3"');
+        }
+        $this->error(403, 'AccessDenied', 'Access Denied', $this->requestResourcePath());
+    }
+
+    /**
+     * Whether the client sent SigV4/V2 or HTTP Basic access-key material.
+     *
+     * @return bool
+     */
+    protected function requestPresentsCredentials()
+    {
+        return filesS3Auth::hasRequestSignature() || filesS3Auth::getAccessKeySecretFromRequest() !== null;
+    }
+
+    /**
+     * @param string $header
+     */
+    protected function emitHeader($header)
+    {
+        header($header);
+    }
+
+    /**
+     * Request path for error Resource (no query string).
+     *
+     * @return string
+     */
+    protected function requestResourcePath()
+    {
+        $uri = (string) waRequest::server('REQUEST_URI', '');
+        $path = parse_url($uri, PHP_URL_PATH);
+        if ($path === false || $path === null || $path === '') {
+            return '/';
+        }
+        return $path;
     }
 
     /**
@@ -554,13 +670,11 @@ class filesS3Server
 
     protected function sendResponse($code, $body)
     {
-        waLog::log(waRequest::server('REQUEST_URI') . "\n" . $body, 'files/s3-debug.log');
         $this->prepareResponse();
         header('Content-Type: application/xml; charset=UTF-8');
         header('Content-Length: ' . strlen($body));
         http_response_code($code);
         echo $body;
-waLog::log(waRequest::server('REQUEST_URI') . "\n" . $body, 'files/s3-debug.log');
         $this->finishResponse();
     }
 

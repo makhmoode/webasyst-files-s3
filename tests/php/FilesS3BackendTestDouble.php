@@ -21,6 +21,16 @@ class FilesS3BackendTestDouble extends filesS3Backend
     public $last_replace_file = null;
 
     /**
+     * @var bool
+     */
+    public $load_storages_called = false;
+
+    /**
+     * @var int
+     */
+    public $load_storages_calls = 0;
+
+    /**
      * @param array $storages name => storage row (id, name, create_datetime, ...)
      * @param string $root_url
      * @param array $settings
@@ -38,6 +48,24 @@ class FilesS3BackendTestDouble extends filesS3Backend
     public function init()
     {
         // no-op for unit tests
+    }
+
+    /**
+     * Skip DB storage load.
+     */
+    public function initRootUrl()
+    {
+        // keep injected root_url
+    }
+
+    /**
+     * Track post-auth storage load without hitting DB.
+     */
+    public function loadStorages()
+    {
+        $this->load_storages_called = true;
+        $this->load_storages_calls++;
+        // keep injected storage_list
     }
 
     /**

@@ -32,7 +32,7 @@ class FilesS3SignatureV4TestDouble extends filesS3SignatureV4
         if (!empty($_SERVER['CONTENT_TYPE'])) {
             $headers['Content-Type'] = $_SERVER['CONTENT_TYPE'];
         }
-        if (!empty($_SERVER['CONTENT_LENGTH'])) {
+        if (isset($_SERVER['CONTENT_LENGTH']) && $_SERVER['CONTENT_LENGTH'] !== '') {
             $headers['Content-Length'] = $_SERVER['CONTENT_LENGTH'];
         }
 

@@ -139,8 +139,7 @@ class FilesS3AuthTest extends FilesS3IntegrationTestCase
 
     public function testAuthenticateAcceptsAlreadyLoggedInUser()
     {
-        // waUser::isAuth() is always false; filesS3Auth short-circuits on isAuth() === true.
-        // Avoid session_start() under PHPUnit (headers already sent) by using a stub auth user.
+        // Without AWS signature, an already-auth Webasyst user is accepted.
         $stub = new FilesS3AuthUserStub(self::$user->getId());
         wa('files')->setUser($stub);
         $this->assertTrue(wa()->getUser()->isAuth());
@@ -151,46 +150,50 @@ class FilesS3AuthTest extends FilesS3IntegrationTestCase
             'host'   => 'example.com',
         ));
 
-        // Real class: early return when user is already auth.
         $auth = new filesS3Auth('us-east-1');
         $this->assertTrue($auth->authenticate());
+    }
+
+    public function testAuthenticatePrefersSignatureOverSession()
+    {
+        $stub = new FilesS3AuthUserStub(self::$user->getId());
+        wa('files')->setUser($stub);
+        $this->assertTrue(wa()->getUser()->isAuth());
+
+        $uri = '/files/bucket-name';
+        $signed = FilesS3SigV4RequestBuilder::sign(array(
+            'access_key' => 'no_such_login_' . uniqid(),
+            'secret_key' => 'any-secret',
+            'region'     => 'us-east-1',
+            'method'     => 'HEAD',
+            'uri'        => $uri,
+            'host'       => 'example.com',
+        ));
+
+        FilesS3RequestHelper::apply(array(
+            'method'  => 'HEAD',
+            'uri'     => $uri,
+            'host'    => 'example.com',
+            'headers' => $signed['headers'],
+        ));
+
+        $this->assertTrue(filesS3Auth::hasRequestSignature());
+        $auth = $this->createAuth();
+        $this->assertFalse($auth->authenticate(), 'Signed request must not short-circuit on session auth');
     }
 }
 
 /**
- * filesS3Auth that applies credentials without starting a PHP session (for PHPUnit).
+ * filesS3Auth that uses the SigV4 test double (clears getallheaders cache).
  */
 class FilesS3AuthNoSession extends filesS3Auth
 {
-    public function authenticate()
+    /**
+     * @return FilesS3SignatureV4TestDouble
+     */
+    protected function createSignatureVerifier()
     {
-        if (wa()->getUser()->isAuth()) {
-            return true;
-        }
-
-        $sig = new FilesS3SignatureV4TestDouble($this->region);
-        $access_key = $sig->getAccessKey();
-        if (!$access_key) {
-            return false;
-        }
-
-        $cm = new waContactModel();
-        $contact = $cm->getByField('login', $access_key);
-        if (!$contact) {
-            return false;
-        }
-
-        $secret = filesS3Plugin::getSecretKey($contact['id']);
-        if ($secret === '' || $secret === null || $secret === false) {
-            return false;
-        }
-
-        if (!$sig->verify($secret)) {
-            return false;
-        }
-
-        wa()->setUser(new FilesS3AuthUserStub($contact['id'], ifset($contact['login'], $access_key)));
-        return true;
+        return new FilesS3SignatureV4TestDouble($this->region);
     }
 }
 

@@ -255,6 +255,30 @@ class filesS3SignatureV4
     {
         $sets = array(array());
 
+        if (strpos($signed_headers, 'content-length') !== false) {
+            $current = $this->getHeaderValue('content-length');
+            $length_variants = array_unique(array($current, '0', ''));
+            $expanded = array();
+            foreach ($sets as $base) {
+                foreach ($length_variants as $length) {
+                    $expanded[] = array_merge($base, array('content-length' => $length));
+                }
+            }
+            $sets = $expanded;
+        }
+
+        if (strpos($signed_headers, 'accept-encoding') !== false) {
+            $current = $this->getHeaderValue('accept-encoding');
+            $ae_variants = array_unique(array($current, 'identity', ''));
+            $expanded = array();
+            foreach ($sets as $base) {
+                foreach ($ae_variants as $ae) {
+                    $expanded[] = array_merge($base, array('accept-encoding' => $ae));
+                }
+            }
+            $sets = $expanded;
+        }
+
         if (strpos($signed_headers, 'x-amz-copy-source') === false) {
             return $sets;
         }
@@ -301,15 +325,13 @@ class filesS3SignatureV4
             }
         }
 
-        $sets = array();
-        foreach (array_unique($variants) as $variant) {
-            $sets[] = array('x-amz-copy-source' => $variant);
+        $expanded = array();
+        foreach ($sets as $base) {
+            foreach (array_unique($variants) as $variant) {
+                $expanded[] = array_merge($base, array('x-amz-copy-source' => $variant));
+            }
         }
-        if (!$sets) {
-            $sets[] = array();
-        }
-
-        return $sets;
+        return $expanded ? $expanded : $sets;
     }
 
     /**
@@ -364,25 +386,32 @@ class filesS3SignatureV4
 
         $method = strtoupper(waRequest::server('REQUEST_METHOD', waRequest::method()));
         $signing_key = $this->getSigningKey($secret_key, $date, $region);
+        $methods = array_values(array_unique(array($method, 'HEAD', 'GET')));
 
-        foreach ($this->getCanonicalUriCandidates() as $canonical_uri) {
-            foreach ($this->getHostHeaderCandidates() as $host) {
-                foreach ($payload_hashes as $payload_hash) {
-                    foreach ($this->getHeaderOverrideSets($signed_headers) as $header_overrides) {
-                        $canonical_request = $this->buildCanonicalRequest(
-                            $method,
-                            $canonical_uri,
-                            $canonical_query,
-                            $this->getCanonicalHeaders($signed_headers, $host, $header_overrides),
-                            $signed_headers,
-                            $payload_hash
-                        );
+        foreach ($methods as $try_method) {
+            // Only try alternate verbs when the wire method is HEAD or GET.
+            if ($try_method !== $method && !in_array($method, array('HEAD', 'GET'), true)) {
+                continue;
+            }
+            foreach ($this->getCanonicalUriCandidates() as $canonical_uri) {
+                foreach ($this->getHostHeaderCandidates() as $host) {
+                    foreach ($payload_hashes as $payload_hash) {
+                        foreach ($this->getHeaderOverrideSets($signed_headers) as $header_overrides) {
+                            $canonical_request = $this->buildCanonicalRequest(
+                                $try_method,
+                                $canonical_uri,
+                                $canonical_query,
+                                $this->getCanonicalHeaders($signed_headers, $host, $header_overrides),
+                                $signed_headers,
+                                $payload_hash
+                            );
 
-                        $string_to_sign = $this->buildStringToSign($amz_date, $date, $region, $canonical_request);
-                        $expected = hash_hmac('sha256', $string_to_sign, $signing_key);
+                            $string_to_sign = $this->buildStringToSign($amz_date, $date, $region, $canonical_request);
+                            $expected = hash_hmac('sha256', $string_to_sign, $signing_key);
 
-                        if (hash_equals($expected, $signature)) {
-                            return true;
+                            if (hash_equals($expected, $signature)) {
+                                return true;
+                            }
                         }
                     }
                 }
@@ -557,11 +586,6 @@ class filesS3SignatureV4
      */
     protected function getAllHeaders()
     {
-        static $headers = null;
-        if ($headers !== null) {
-            return $headers;
-        }
-
         $headers = array();
         if (function_exists('getallheaders')) {
             $raw = getallheaders();
@@ -584,7 +608,8 @@ class filesS3SignatureV4
         if (!empty($_SERVER['CONTENT_TYPE'])) {
             $headers['Content-Type'] = $_SERVER['CONTENT_TYPE'];
         }
-        if (!empty($_SERVER['CONTENT_LENGTH'])) {
+        // Do not use empty(): CONTENT_LENGTH "0" is valid and common for HEAD/GET.
+        if (isset($_SERVER['CONTENT_LENGTH']) && $_SERVER['CONTENT_LENGTH'] !== '') {
             $headers['Content-Length'] = $_SERVER['CONTENT_LENGTH'];
         }
 
