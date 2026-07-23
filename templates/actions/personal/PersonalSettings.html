@@ -3,7 +3,17 @@
 <div class="fields custom-mt-16" id="files-s3-credentials-block">
     {if $endpoint_url}
         <div class="field">
-            <div class="name">[`Endpoint`]</div>
+            <div class="name">[`Server`]</div>
+            <div class="value break-all">
+                <code class="s3-server">{$server|escape}</code>
+                <a href="javascript:void(0);" class="s3-copy custom-ml-4 gray" title="[`Copy to clipboard`]" data-copy-value="{$server|escape}">
+                    <i class="fas fa-copy s3-copy-icon"></i>
+                    <i class="fas fa-check s3-copy-done" style="display:none;color:var(--green);"></i>
+                </a>
+            </div>
+        </div>
+        <div class="field">
+            <div class="name">[`Endpoint URL`]</div>
             <div class="value break-all">
                 <code class="s3-endpoint">{$endpoint_url|escape}</code>
                 <a href="javascript:void(0);" class="s3-copy custom-ml-4 gray" title="[`Copy to clipboard`]" data-copy-value="{$endpoint_url|escape}">
@@ -23,7 +33,7 @@
             </div>
         </div>
         <div class="field">
-            <div class="name">[`Access key`]</div>
+            <div class="name">[`Access Key ID`]</div>
             <div class="value break-all">
                 <code class="s3-access-key">{$access_key|escape}</code>
                 <a href="javascript:void(0);" class="s3-copy custom-ml-4 gray" title="[`Copy to clipboard`]" data-copy-value="{$access_key|escape}">
@@ -52,7 +62,7 @@
                 <button type="button" class="button light-gray s3-regenerate-secret">[`Regenerate secret`]</button>
             </div>
         </div>
-        <p class="hint">[`Use these credentials in S3 clients (Cyberduck, aws cli, rclone). The access key is your Webasyst login.`]</p>
+        <p class="hint">[`Use these credentials in S3 clients (Cyberduck, aws cli, rclone). The Access Key ID is your Webasyst login.`]</p>
     {else}
         <p class="hint custom-m-0">[`S3 settlement URL is not configured. Ask your administrator to configure the S3 plugin.`]</p>
     {/if}

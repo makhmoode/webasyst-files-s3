@@ -5,7 +5,7 @@ return array(
     'icon'        => 'img/logo.png',
     'img'         => 'img/logo.png',
     'version'     => '1.0.0',
-    'vendor'      => 'webasyst',
+    'vendor'      => '1078318',
     'handlers'    => array(
         'files_frontend_request' => 'frontendRequest',
         'backend_sidebar'        => 'backendSidebar',

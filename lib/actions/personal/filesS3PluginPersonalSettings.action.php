@@ -16,6 +16,7 @@ class filesS3PluginPersonalSettingsAction extends waViewAction
 
         $this->view->assign(array(
             'endpoint_url'   => filesS3Plugin::getEndpointUrl(),
+            'server'         => filesS3Plugin::getEndpointServer(),
             'region'         => $plugin->getSettings('region'),
             'access_key'     => $user->get('login'),
             'secret_key'     => $secret,

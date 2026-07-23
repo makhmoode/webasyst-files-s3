@@ -32,6 +32,18 @@ msgstr "Регион для настройки S3-клиента и Signature V4
 msgid "S3 Server must be secured by a valid SSL certificate for production use."
 msgstr "Сервер S3 должен быть защищён действительным SSL-сертификатом для реального применения."
 
+msgid "Important:"
+msgstr "Важно:"
+
+msgid "Only path-style S3 access is supported."
+msgstr "Поддерживается только path-style доступ к S3."
+
+msgid "Virtual hosts style S3 addressing does not supported."
+msgstr "Virtual-hosted style адресация S3 не поддерживается."
+
+msgid "Use path-style S3 access in client configuration."
+msgstr "Используйте path-style доступ в настройках S3-клиента."
+
 msgid "To enable S3, you need a dedicated domain or subdomain (for example, <code>%s</code>) with a root settlement of the Files app."
 msgstr "Для включения S3 нужен выделенный домен или субдомен (например, <code>%s</code>) с поселением приложения «Файлы» в корне."
 
@@ -42,10 +54,10 @@ msgid "S3 credentials"
 msgstr "Учётные данные S3"
 
 msgid "Personal S3 settings"
-msgstr "Личные настройки S3"
+msgstr "Персональные настройки S3"
 
-msgid "Use these credentials in S3 clients (Cyberduck, aws cli, rclone). The access key is your Webasyst login."
-msgstr "Используйте эти учётные данные в S3-клиентах (Cyberduck, aws cli, rclone). Ключ доступа — ваш логин Webasyst."
+msgid "Use these credentials in S3 clients (Cyberduck, aws cli, rclone). The Access Key ID is your Webasyst login."
+msgstr "Используйте эти учётные данные в S3-клиентах (Cyberduck, aws cli, rclone). ID Ключа Доступа — ваш логин Webasyst."
 
 msgid "On-demand source sync TTL"
 msgstr "TTL синхронизации по требованию"
@@ -56,20 +68,17 @@ msgstr "Новый секретный ключ"
 msgid "S3 connection settings"
 msgstr "Настройки подключения S3"
 
-msgid "S3 URL"
-msgstr "URL S3"
+msgid "Endpoint URL"
+msgstr "Endpoint URL"
 
-msgid "S3 Access Key"
-msgstr "Ключ доступа S3"
+msgid "Access Key ID"
+msgstr "ID Ключа Доступа"
 
 msgid "S3 Secret Access Key"
 msgstr "Секретный ключ доступа S3"
 
-msgid "Endpoint"
-msgstr "Endpoint"
-
-msgid "Access key"
-msgstr "Ключ доступа"
+msgid "Server"
+msgstr "Сервер"
 
 msgid "Secret key"
 msgstr "Секретный ключ"
@@ -101,8 +110,8 @@ msgstr "В качестве S3 endpoint можно использовать то
 msgid "Users S3 secrets"
 msgstr "S3-секреты пользователей"
 
-msgid "Manage S3 secret access keys for users who have access to the Files app. The access key is the user login."
-msgstr "Управление секретными ключами S3 для пользователей с доступом к приложению «Файлы». Ключ доступа — логин пользователя."
+msgid "Manage S3 secret access keys for users who have access to the Files app. The Access Key ID is the user login."
+msgstr "Управление секретными ключами S3 для пользователей с доступом к приложению «Файлы». ID Ключа Доступа — логин пользователя."
 
 msgid "User"
 msgstr "Пользователь"
@@ -166,9 +175,6 @@ msgstr "Чтобы увеличить лимит, поднимите <code>uploa
 
 msgid "Available buckets"
 msgstr "Доступные бакеты"
-
-msgid "Use path-style S3 access in client configuration."
-msgstr "Используйте path-style доступ в настройках S3-клиента."
 
 msgid "Storage names are used as bucket names — use DNS-compatible lowercase names for best compatibility with S3 clients."
 msgstr "Названия хранилищ (корневых папок) используются как имена бакетов — для лучшей совместимости используйте строчные DNS-совместимые имена."

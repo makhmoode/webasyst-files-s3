@@ -65,6 +65,7 @@ class filesS3PluginCredentialsManageController extends waJsonController
         return array(
             'has_secret'   => true,
             'endpoint_url' => filesS3Plugin::getEndpointUrl(),
+            'server'       => filesS3Plugin::getEndpointServer(),
             'region'       => $plugin->getSettings('region'),
             'access_key'   => (string) $contact->get('login'),
             'secret_key'   => $secret,

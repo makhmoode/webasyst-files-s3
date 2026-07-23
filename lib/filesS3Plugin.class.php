@@ -101,7 +101,9 @@ class filesS3Plugin extends waPlugin
         foreach ($domain_routes as $domain => $routes) {
             foreach ($routes as $route) {
                 $uri = $domain . '/' . $route['url'];
-                $url = 'http' . (waRequest::isHttps() ? 's' : '') . '://' . preg_replace('!\*$!', '', $uri);
+                $host = rtrim(preg_replace('!\*$!', '', $uri), '/');
+                $https = waRequest::isHttps() || self::isSettlementHttpsForced($host);
+                $url = 'http' . ($https ? 's' : '') . '://' . $host;
                 $settlements[$uri] = array(
                     'url'     => $url,
                     'is_root' => self::isRootSettlement($route),
@@ -284,9 +286,78 @@ class filesS3Plugin extends waPlugin
             return '';
         }
         $settlement = preg_replace('!\*$!', '', $settlement);
-        $url = 'http' . (waRequest::isHttps() ? 's' : '') . '://' . $settlement;
+        $https = waRequest::isHttps() || self::isSettlementHttpsForced($settlement);
+        $url = 'http' . ($https ? 's' : '') . '://' . $settlement;
 
         return rtrim($url, '/');
+    }
+
+    /**
+     * Whether settlement domain (or its Files route) forces HTTPS via ssl_all.
+     *
+     * @param string $settlement domain[/path] without trailing *
+     * @return bool
+     */
+    protected static function isSettlementHttpsForced($settlement)
+    {
+        $settlement = preg_replace('/:\d+/', '', (string) $settlement);
+        $settlement = rtrim($settlement, '/');
+        if ($settlement === '') {
+            return false;
+        }
+
+        $slash = strpos($settlement, '/');
+        $domain = $slash === false ? $settlement : substr($settlement, 0, $slash);
+        if ($domain === '') {
+            return false;
+        }
+
+        if (waRouting::getDomainConfig('ssl_all', $domain)) {
+            return true;
+        }
+
+        $path = $slash === false ? '' : trim(substr($settlement, $slash + 1), '/');
+        $domain_routes = wa()->getRouting()->getByApp('files');
+        if (empty($domain_routes[$domain])) {
+            return false;
+        }
+
+        foreach ($domain_routes[$domain] as $route) {
+            if (empty($route['ssl_all'])) {
+                continue;
+            }
+            $route_path = trim(preg_replace('!\*$!', '', ifset($route, 'url', '')), '/');
+            if ($route_path === $path) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Endpoint host for S3 clients (Cyberduck "Server"), without http(s):// or path.
+     *
+     * @return string
+     */
+    public static function getEndpointServer()
+    {
+        $endpoint = self::getEndpointUrl();
+        if ($endpoint === '') {
+            return '';
+        }
+
+        $host = parse_url($endpoint, PHP_URL_HOST);
+        if (!$host) {
+            return preg_replace('~^https?://~i', '', $endpoint);
+        }
+
+        $port = parse_url($endpoint, PHP_URL_PORT);
+        if ($port) {
+            return $host . ':' . $port;
+        }
+
+        return $host;
     }
 
     /**
