@@ -2,7 +2,6 @@
 
 $is_russian_locale = wa()->getLocale() === 'ru_RU';
 $region_placeholder = $is_russian_locale ? 'ru-central1' : 'us-east-1';
-$has_root_files_settlement = filesS3Plugin::hasRootFilesSettlement();
 
 return array(
     'top_block' => array(
@@ -14,9 +13,7 @@ return array(
     ),
     'settlement' => array(
         'title'        => _wp('Server URL'),
-        'description'  => $has_root_files_settlement
-            ? _wp('Only a root settlement of the Files app can be used as S3 endpoint.')
-            : '',
+        'description'  => _wp('Root settlement: each storage is a separate bucket (/bucket/key). Non-root settlement: one bucket whose folders are the storages.'),
         'control_type' => waHtmlControl::CUSTOM . ' ' . 'filesS3Plugin::getSettlementHtml',
     ),
     'region' => array(

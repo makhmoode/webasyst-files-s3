@@ -233,7 +233,7 @@ abstract class FilesS3IntegrationTestCase extends FilesS3TestCase
     {
         $backend = new filesS3Backend(array(
             'region'     => 'us-east-1',
-            'settlement' => 'example.com/files/',
+            'settlement' => 'example.com/*',
         ));
         $backend->init();
         return $backend;

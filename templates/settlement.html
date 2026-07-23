@@ -3,22 +3,25 @@
     {if $settlements}
 
         {foreach $settlements as $_uri => $_item}
-            <label{if !$_item.is_root} class="gray"{/if}>
-                <input type="radio" name="files_s3[settlement]" value="{$_uri|escape}" class="radiogroup"{if !$_item.is_root} disabled{/if}{if $settlement == $_uri} checked{/if} /> &nbsp; {$_item.url|escape}
+            <label>
+                <input type="radio" name="files_s3[settlement]" value="{$_uri|escape}" class="radiogroup"{if $settlement == $_uri} checked{/if} /> &nbsp; {$_item.url|escape}
+                {if $_item.is_root}
+                    <span class="hint"> — [`root: storages as buckets`]</span>
+                {else}
+                    <span class="hint"> — [`one bucket; storages as folders`]</span>
+                {/if}
             </label>
             <br />
         {/foreach}
 
-    {/if}
+    {else}
 
-    {if !$has_root_settlement}
-
-        <p{if $settlements} class="custom-mt-8"{/if}>
+        <p>
             {sprintf_wp(
-                'To enable S3, you need a dedicated domain or subdomain (for example, <code>%s</code>) with a root settlement of the Files app.',
+                'To enable S3, add a Files app settlement in <a href="%s">Site</a> — root on a dedicated domain (e.g. <code>%s</code>), or a path settlement used as a single bucket with storages as folders.',
+                "`$wa_backend_url`site/#/routing/",
                 $example_s3_host|escape
             )}
-            {sprintf_wp('Use <a href="%s">Site</a> to create new settlement.', "`$wa_backend_url`site/#/routing/")}
         </p>
         <script>
             $('#plugins-settings-form input[type="submit"]').attr('disabled', true);

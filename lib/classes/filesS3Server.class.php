@@ -25,12 +25,15 @@ class filesS3Server
         $region = ifempty($this->settings['region'], filesS3Plugin::DEFAULT_REGION);
         $auth = new filesS3Auth($region);
 
-        // root_url only — do not load storages before auth (guest rights hide limited buckets).
-        $this->backend->initRootUrl();
-
-        $path = waRequest::server('REQUEST_URI');
-        $relative = $this->backend->stripRootPath($path);
-        list($bucket, $key) = $this->backend->splitBucketAndKey($relative);
+        // Prefer Webasyst request path (handles install subdir / index.php); fall back to REQUEST_URI.
+        $request_path = '';
+        if (wa()->getConfig()) {
+            $request_path = (string) wa()->getConfig()->getRequestUrl(true, true);
+        }
+        if ($request_path === '') {
+            $request_path = (string) waRequest::server('REQUEST_URI');
+        }
+        list($bucket, $key) = $this->backend->parsePathStyleRequest($request_path);
         $method = strtoupper(waRequest::method());
 
         if (!$auth->authenticate()) {
@@ -47,8 +50,7 @@ class filesS3Server
             return;
         }
         if ($method === 'GET' && $bucket !== '' && $key !== '' && $this->isListObjectsGetRequest($key)) {
-            $this->applyListObjectsDefaults($key);
-            $this->handleListObjects($bucket);
+            $this->handleListObjects($bucket, $key);
             return;
         }
         if ($method === 'GET' && $bucket !== '' && $key === '' && waRequest::get('location') !== null) {
@@ -133,7 +135,7 @@ class filesS3Server
         $this->xmlResponse(200, $xml);
     }
 
-    protected function handleListObjects($bucket)
+    protected function handleListObjects($bucket, $path_key = '')
     {
         if (!$this->backend->bucketExists($bucket)) {
             $this->error(404, 'NoSuchBucket', 'The specified bucket does not exist', '/' . $bucket);
@@ -141,9 +143,19 @@ class filesS3Server
         }
 
         $prefix = (string) waRequest::get('prefix', '');
+        // Path-style folder open (GET /settlement/storage/) often has no prefix query.
+        if ($prefix === '' && $path_key !== '') {
+            $prefix = $path_key;
+        }
         $delimiter = (string) waRequest::get('delimiter', '');
+        if ($delimiter === '' && $path_key !== '' && substr($path_key, -1) === '/') {
+            $delimiter = '/';
+        }
         $max_keys = (int) waRequest::get('max-keys', 1000);
         $list_type = waRequest::get('list-type');
+        if ($list_type === null || $list_type === '') {
+            $list_type = '2';
+        }
         $continuation = (string) waRequest::get('continuation-token', '');
         $marker = (string) waRequest::get('marker', $continuation);
         $start_after = (string) waRequest::get('start-after', $marker);
@@ -154,7 +166,10 @@ class filesS3Server
             return;
         }
 
-        if ($list_type === '2') {
+        // XML must echo the effective prefix used for listing.
+        $prefix = isset($result['prefix']) ? $result['prefix'] : $prefix;
+
+        if ((string) $list_type === '2') {
             $xml = filesS3Xml::listObjectsV2(
                 $bucket,
                 $prefix,
@@ -366,8 +381,18 @@ class filesS3Server
         if (waRequest::get('list-type') !== null) {
             return true;
         }
+        if (waRequest::get('prefix') !== null || waRequest::get('delimiter') !== null) {
+            return true;
+        }
         // Folder keys end with '/'; Cyberduck opens them with GET and expects ListBucketResult.
-        return $key !== '' && substr($key, -1) === '/';
+        if ($key !== '' && substr($key, -1) === '/') {
+            return true;
+        }
+        // Settlement mode: GET /files/docs (no trailing slash) lists that storage folder.
+        if ($this->backend->isSettlementBucketMode() && $key !== '' && strpos($key, '/') === false) {
+            return true;
+        }
+        return false;
     }
 
     /**

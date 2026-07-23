@@ -109,28 +109,25 @@ class filesS3Plugin extends waPlugin
             }
         }
 
-        $has_root_settlement = false;
-        foreach ($settlements as $item) {
-            if (!empty($item['is_root'])) {
-                $has_root_settlement = true;
-                break;
-            }
-        }
-
         $settlement = wa()->getPlugin('s3')->getSettings('settlement');
         if (empty($settlement) || empty($settlements[$settlement])) {
+            $settlement = '';
             foreach ($settlements as $uri => $item) {
-                if ($item['is_root']) {
+                if (!empty($item['is_root'])) {
                     $settlement = $uri;
                     break;
                 }
+            }
+            if ($settlement === '' && $settlements) {
+                reset($settlements);
+                $settlement = key($settlements);
             }
         }
 
         $view = wa()->getView();
         $view->assign('settlements', $settlements);
         $view->assign('settlement', $settlement);
-        $view->assign('has_root_settlement', $has_root_settlement);
+        $view->assign('has_settlement', !empty($settlements));
         $view->assign('example_s3_host', self::getExampleS3Host());
         return $view->fetch('plugins/s3/templates/settlement.html');
     }
@@ -176,6 +173,46 @@ class filesS3Plugin extends waPlugin
     public static function isRootSettlement($route)
     {
         return ifset($route, 'url', '') === '*';
+    }
+
+    /**
+     * Path part of a stored settlement setting (empty for root `domain/*`).
+     *
+     * Settlement is stored as `{domain}/{route.url}`, e.g. `s3.example.com/*`
+     * or `example.com/files/*`.
+     *
+     * @param string|null $settlement
+     * @return string
+     */
+    public static function getSettlementPath($settlement = null)
+    {
+        if ($settlement === null) {
+            $settlement = (string) wa()->getPlugin('s3')->getSettings('settlement');
+        }
+        $settlement = preg_replace('/:\d+/', '', (string) $settlement);
+        $settlement = rtrim($settlement, '*');
+        $settlement = trim($settlement, '/');
+        if ($settlement === '') {
+            return '';
+        }
+
+        $slash = strpos($settlement, '/');
+        if ($slash === false) {
+            return '';
+        }
+
+        return trim(substr($settlement, $slash + 1), '/');
+    }
+
+    /**
+     * Whether settlement setting points at a root Files route.
+     *
+     * @param string|null $settlement
+     * @return bool
+     */
+    public static function isRootSettlementSetting($settlement = null)
+    {
+        return self::getSettlementPath($settlement) === '';
     }
 
     public static function getTopBlockHtml()

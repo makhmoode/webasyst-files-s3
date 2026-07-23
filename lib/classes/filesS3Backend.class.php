@@ -65,9 +65,20 @@ class filesS3Backend
 
     /**
      * Settlement path prefix for path-style URLs (safe before auth).
+     *
+     * In non-root settlement mode the prefix must stay equal to the settlement
+     * path (e.g. /files/). Using wa()->getRouteUrl('') here is unsafe: for
+     * requests like /files/docs/ it may include the object key and then
+     * stripRootPath eats the storage folder, so ListObjects sees an empty
+     * prefix and returns the storage list again.
      */
     public function initRootUrl()
     {
+        $settlement_path = $this->getSettlementBucketName();
+        if ($settlement_path !== '') {
+            $this->root_url = '/' . trim(str_replace('\\', '/', $settlement_path), '/') . '/';
+            return;
+        }
         $this->root_url = rtrim((string) wa()->getRouteUrl(''), '/') . '/';
     }
 
@@ -89,6 +100,23 @@ class filesS3Backend
      */
     public function getBuckets()
     {
+        $forced = $this->getSettlementBucketName();
+        if ($forced !== '') {
+            $created = null;
+            foreach ($this->storage_list as $storage) {
+                $dt = ifset($storage['create_datetime'], '');
+                if ($created === null || ($dt !== '' && $dt < $created)) {
+                    $created = $dt;
+                }
+            }
+            return array(
+                array(
+                    'name'            => $forced,
+                    'create_datetime' => $created ?: date('Y-m-d H:i:s'),
+                ),
+            );
+        }
+
         $buckets = array();
         foreach ($this->storage_list as $storage) {
             $buckets[] = array(
@@ -105,6 +133,10 @@ class filesS3Backend
      */
     public function bucketExists($bucket)
     {
+        $forced = $this->getSettlementBucketName();
+        if ($forced !== '') {
+            return $bucket === $forced;
+        }
         return isset($this->storage_list[$bucket]);
     }
 
@@ -115,9 +147,31 @@ class filesS3Backend
      */
     public function resolveKey($bucket, $key)
     {
+        if ($this->isSettlementBucketMode()) {
+            if ($bucket === $this->getSettlementBucketName()) {
+                return $this->resolveSettlementObjectKey($key);
+            }
+            // Internal re-resolve after ensureFolders may pass a storage name.
+            if (isset($this->storage_list[$bucket])) {
+                return $this->resolveStorageObjectKey($bucket, $key);
+            }
+            return false;
+        }
+        return $this->resolveStorageObjectKey($bucket, $key);
+    }
+
+    /**
+     * Root multi-bucket mode: $bucket is a storage name.
+     *
+     * @param string $bucket
+     * @param string $key
+     * @return bool
+     */
+    protected function resolveStorageObjectKey($bucket, $key)
+    {
         $this->current_key = ltrim($key, '/');
         $this->is_folder_key = $this->isFolderKey($this->current_key);
-        if (!$this->bucketExists($bucket)) {
+        if (!isset($this->storage_list[$bucket])) {
             return false;
         }
 
@@ -128,6 +182,68 @@ class filesS3Backend
 
         $this->parsePath($bucket, $path, $this->last_folder, $this->requested_node, $this->last_folder_exists);
         return true;
+    }
+
+    /**
+     * Non-root settlement: one virtual bucket; object keys are storageName[/path...].
+     *
+     * @param string $key
+     * @return bool
+     */
+    protected function resolveSettlementObjectKey($key)
+    {
+        $full = ltrim($this->decodeObjectPath($key), '/');
+        if ($full === '') {
+            $this->current_key = '';
+            $this->is_folder_key = true;
+            $this->storage_id = 0;
+            $this->parent_id = 0;
+            $root = $this->virtualBucketRootNode();
+            $this->last_folder = $root;
+            $this->requested_node = $root;
+            $this->last_folder_exists = true;
+            return true;
+        }
+
+        list($storage, $inner) = $this->splitSettlementObjectKey($full);
+        if ($storage === '' || !isset($this->storage_list[$storage])) {
+            return false;
+        }
+
+        return $this->resolveStorageObjectKey($storage, $inner);
+    }
+
+    /**
+     * @param string $key full key inside the virtual settlement bucket
+     * @return array [storage_name, key_within_storage]
+     */
+    public function splitSettlementObjectKey($key)
+    {
+        $key = ltrim($this->decodeObjectPath($key), '/');
+        if ($key === '') {
+            return array('', '');
+        }
+        $parts = explode('/', $key, 2);
+        return array($parts[0], isset($parts[1]) ? $parts[1] : '');
+    }
+
+    /**
+     * @return array
+     */
+    protected function virtualBucketRootNode()
+    {
+        $name = $this->getSettlementBucketName();
+        return array(
+            'id'              => 0,
+            'name'            => $name,
+            'type'            => 'folder',
+            'size'            => 0,
+            'create_datetime' => date('Y-m-d H:i:s'),
+            'update_datetime' => date('Y-m-d H:i:s'),
+            'is_storage'      => false,
+            'is_virtual_root' => true,
+            'storage_id'      => 0,
+        );
     }
 
     /**
@@ -147,24 +263,39 @@ class filesS3Backend
         $prefix = $this->normalizePrefix($prefix);
         $max_keys = max(1, min(1000, (int) $max_keys));
 
-        $this->resolveKey($bucket, $prefix);
+        if ($this->isSettlementBucketMode() && $prefix === '') {
+            return $this->listSettlementRootPrefixes($delimiter, $max_keys, $start_after);
+        }
+
+        if (!$this->resolveKey($bucket, $prefix)) {
+            return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
+        }
 
         // Prefix ending with '/' targets a folder (or implied prefix). List that folder's children.
         $folder_marker = null;
         if ($prefix !== '' && substr($prefix, -1) === '/') {
-            if (empty($this->requested_node['id']) || $this->requested_node['type'] !== 'folder'
-                || !empty($this->requested_node['is_storage'])
-            ) {
+            if (empty($this->requested_node['id']) && empty($this->requested_node['is_storage'])) {
+                return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
+            }
+            if (empty($this->requested_node['type']) || $this->requested_node['type'] !== 'folder') {
+                return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
+            }
+            // Root multi-bucket: prefix that resolves to the storage itself is not a listable folder marker.
+            // Settlement mode: prefix "storage/" is how clients open a storage folder inside the virtual bucket.
+            if (!empty($this->requested_node['is_storage']) && !$this->isSettlementBucketMode()) {
                 return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
             }
             $parent = $this->requested_node;
             // Cyberduck / AWS console folder placeholder: zero-size object named as the prefix.
-            $folder_marker = $this->nodeToListItem($prefix, $parent);
-            $folder_marker['size'] = 0;
+            // Do not emit a marker for the storage root itself (prefix "docs/") — only for nested folders.
+            if (empty($this->requested_node['is_storage'])) {
+                $folder_marker = $this->nodeToListItem($prefix, $parent);
+                $folder_marker['size'] = 0;
+            }
         } else {
             $parent = $this->last_folder;
         }
-        if (!$parent) {
+        if (!$parent || !empty($parent['is_virtual_root'])) {
             return array('items' => array(), 'common_prefixes' => array(), 'is_truncated' => false, 'next' => '');
         }
 
@@ -618,16 +749,20 @@ class filesS3Backend
             return false;
         }
 
-        $filename = basename($key);
-        $dir = dirname($key);
+        if (!$this->storage_id) {
+            return false;
+        }
+
+        $filename = basename($this->current_key);
+        $dir = dirname($this->current_key);
         $parent_id = 0;
-        $storage_id = $this->storage_list[$bucket]['id'];
+        $storage_id = $this->storage_id;
 
         if ($dir !== '.' && $dir !== '') {
             if (!$this->ensureFolders($storage_id, $dir)) {
                 return false;
             }
-            $this->resolveKey($bucket, $dir);
+            $this->resolveKey($bucket, $key);
             $parent_id = $this->parent_id;
         }
 
@@ -863,12 +998,59 @@ class filesS3Backend
     }
 
     /**
+     * Parse path-style S3 URL into [bucket, key].
+     *
+     * Non-root settlement: bucket is always the settlement path; key is the remainder
+     * after stripping one or more leading "{settlement}/" segments (clients may repeat
+     * the bucket name). Independent of wa()->getRouteUrl('').
+     *
+     * @param string $request_path REQUEST_URI or framework request path
+     * @return array [bucket, key]
+     */
+    public function parsePathStyleRequest($request_path)
+    {
+        $path = preg_replace('~\?.*$~', '', (string) $request_path);
+        $parsed = parse_url($path, PHP_URL_PATH);
+        if ($parsed !== false && $parsed !== null && $parsed !== '') {
+            $path = $parsed;
+        }
+        $path = trim(str_replace('\\', '/', $this->decodeObjectPath($path)), '/');
+
+        $forced = $this->getSettlementBucketName();
+        if ($forced !== '') {
+            $forced = trim(str_replace('\\', '/', $forced), '/');
+            $key = $path;
+            for ($i = 0; $i < 2; $i++) {
+                if ($key === $forced) {
+                    $key = '';
+                    break;
+                }
+                $prefix = $forced . '/';
+                if ($key !== '' && strpos($key, $prefix) === 0) {
+                    $key = substr($key, strlen($prefix));
+                    continue;
+                }
+                break;
+            }
+            return array($forced, $key);
+        }
+
+        $this->initRootUrl();
+        return $this->splitBucketAndKey($this->stripRootPath('/' . $path));
+    }
+
+    /**
      * @param string $relative
      * @return array [bucket, key]
      */
     public function splitBucketAndKey($relative)
     {
         $relative = ltrim($this->decodeObjectPath($relative), '/');
+        $forced = $this->getSettlementBucketName();
+        if ($forced !== '') {
+            return $this->parsePathStyleRequest($relative);
+        }
+
         if ($relative === '') {
             return array('', '');
         }
@@ -891,6 +1073,62 @@ class filesS3Backend
 
         $parts = explode('/', $relative, 2);
         return array($parts[0], isset($parts[1]) ? $parts[1] : '');
+    }
+
+    /**
+     * Non-root settlement path used as the sole S3 bucket name (empty = root multi-bucket mode).
+     *
+     * @return string
+     */
+    public function getSettlementBucketName()
+    {
+        if (!empty($this->settings['settlement'])) {
+            return filesS3Plugin::getSettlementPath($this->settings['settlement']);
+        }
+        return '';
+    }
+
+    /**
+     * @return bool
+     */
+    public function isSettlementBucketMode()
+    {
+        return $this->getSettlementBucketName() !== '';
+    }
+
+    /**
+     * List storages as CommonPrefixes inside the virtual settlement bucket.
+     *
+     * @param string $delimiter
+     * @param int $max_keys
+     * @param string $start_after
+     * @return array
+     */
+    protected function listSettlementRootPrefixes($delimiter, $max_keys, $start_after)
+    {
+        $delim = $delimiter !== '' ? $delimiter : '/';
+        $common_prefixes = array();
+        foreach ($this->storage_list as $name => $storage) {
+            $prefix = $name . $delim;
+            if ($start_after !== '' && strcmp($prefix, $start_after) <= 0) {
+                continue;
+            }
+            $common_prefixes[] = $prefix;
+        }
+        sort($common_prefixes, SORT_STRING);
+
+        $is_truncated = count($common_prefixes) > $max_keys;
+        if ($is_truncated) {
+            $common_prefixes = array_slice($common_prefixes, 0, $max_keys);
+        }
+        $next = $is_truncated && $common_prefixes ? end($common_prefixes) : '';
+
+        return array(
+            'items'           => array(),
+            'common_prefixes' => $common_prefixes,
+            'is_truncated'     => $is_truncated,
+            'next'            => $next,
+        );
     }
 
     /**
